@@ -1,26 +1,29 @@
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const connectDB = require('./config/db');
-const authRoutes = require('./routes/authRoutes');
-const invoiceRoutes = require('./routes/invoiceRoutes');
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const connectDB = require("./config/db");
+const authRoutes = require("./routes/authRoutes");
+const invoiceRoutes = require("./routes/invoiceRoutes");
 
 dotenv.config();
 
 const app = express();
 
 // Middleware
-app.use(cors({
-  origin: process.env.CORS_URL
-}));
+app.use(
+  cors({
+    origin: process.env.CORS_URL,
+  })
+);
 app.use(express.json());
+app.use("/api/uploads", express.static("uploads"));
 
 // Database Connection
 connectDB();
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/invoices', invoiceRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/invoices", invoiceRoutes);
 
 const PORT = process.env.PORT || 5000;
 

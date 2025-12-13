@@ -28,9 +28,13 @@ const registerUser = async (
 
   await user.save();
 
-  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-    expiresIn: "1h",
-  });
+  const token = jwt.sign(
+    { id: user._id, type: user.type },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "1h",
+    }
+  );
 
   return {
     token,
@@ -56,9 +60,13 @@ const loginUser = async (username, password) => {
     throw new Error("Invalid credentials");
   }
 
-  const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-    expiresIn: "1h",
-  });
+  const token = jwt.sign(
+    { id: user._id, type: user.type },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "1h",
+    }
+  );
 
   return {
     token,

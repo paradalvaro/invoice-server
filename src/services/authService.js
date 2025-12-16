@@ -81,8 +81,19 @@ const loginUser = async (username, password) => {
   };
 };
 
-const getAllUsers = async () => {
-  return await User.find({}).select("-password");
+const getAllUsers = async (page = 1, limit = 10) => {
+  const skip = (page - 1) * limit;
+  const users = await User.find({}).select("-password").skip(skip).limit(limit);
+
+  const totalItems = await User.countDocuments({});
+  const totalPages = Math.ceil(totalItems / limit);
+
+  return {
+    data: users,
+    currentPage: Number(page),
+    totalPages,
+    totalItems,
+  };
 };
 
 const updateUser = async (id, userData) => {

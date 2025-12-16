@@ -4,8 +4,14 @@ const pdfService = require("../services/pdfService");
 
 const getInvoices = async (req, res) => {
   try {
-    const invoices = await invoiceService.getAllInvoices(req.user.id);
-    res.json(invoices);
+    const { page = 1, limit = 10 } = req.query;
+    const result = await invoiceService.getAllInvoices(
+      req.user.id,
+      req.user.type,
+      page,
+      limit
+    );
+    res.json(result);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

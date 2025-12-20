@@ -32,8 +32,8 @@ const login = async (req, res) => {
 
 const getUsers = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
-    const result = await authService.getAllUsers(page, limit);
+    const { page = 1, limit = 10, sortBy, order } = req.query;
+    const result = await authService.getAllUsers(page, limit, sortBy, order);
     res.json(result);
   } catch (err) {
     res.status(500).json({ message: err.message });

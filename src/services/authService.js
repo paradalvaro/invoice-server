@@ -81,9 +81,21 @@ const loginUser = async (username, password) => {
   };
 };
 
-const getAllUsers = async (page = 1, limit = 10) => {
+const getAllUsers = async (
+  page = 1,
+  limit = 10,
+  sortBy = "name",
+  order = "asc"
+) => {
   const skip = (page - 1) * limit;
-  const users = await User.find({}).select("-password").skip(skip).limit(limit);
+  const sortOptions = {};
+  sortOptions[sortBy] = order === "asc" ? 1 : -1;
+
+  const users = await User.find({})
+    .select("-password")
+    .sort(sortOptions)
+    .skip(skip)
+    .limit(limit);
 
   const totalItems = await User.countDocuments({});
   const totalPages = Math.ceil(totalItems / limit);

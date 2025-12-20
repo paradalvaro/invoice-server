@@ -7,6 +7,7 @@ const roleMiddleware = require("../middleware/roleMiddleware");
 router.use(authMiddleware);
 
 router.get("/", invoiceController.getInvoices);
+router.get("/next-number", invoiceController.getNextNumber);
 router.post("/", invoiceController.createInvoice);
 router.get("/:id", invoiceController.getInvoice);
 router.get("/:id/pdf", invoiceController.generatePdf);

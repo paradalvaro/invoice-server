@@ -6,8 +6,13 @@ const InvoiceSchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
-  invoiceNumber: {
+  serie: {
     type: String,
+    enum: ["A2025", "A2026"],
+    default: "A2025",
+  },
+  invoiceNumber: {
+    type: Number,
     required: true,
   },
   clientName: {

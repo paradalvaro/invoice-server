@@ -2,13 +2,28 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const connectDB = require("./config/db");
+const { facturaQueue } = require("./queues/invoiceQueue");
 const authRoutes = require("./routes/authRoutes");
 const invoiceRoutes = require("./routes/invoiceRoutes");
+
+const { createBullBoard } = require("@bull-board/api");
+const { BullMQAdapter } = require("@bull-board/api/bullMQAdapter");
+const { ExpressAdapter } = require("@bull-board/express");
+
+require("./workers/invoiceWorker");
+
+const serverAdapter = new ExpressAdapter();
+serverAdapter.setBasePath("/admin/queues");
+createBullBoard({
+  queues: [new BullMQAdapter(facturaQueue)],
+  serverAdapter: serverAdapter,
+});
 
 dotenv.config();
 
 const app = express();
 
+app.use("/admin/queues", serverAdapter.getRouter());
 // Middleware
 app.use(
   cors({

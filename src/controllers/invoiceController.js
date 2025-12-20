@@ -2,14 +2,27 @@ const invoiceService = require("../services/invoiceService");
 
 const pdfService = require("../services/pdfService");
 
+const { agregarFacturaACola } = require("../queues/invoiceQueue");
+
 const getInvoices = async (req, res) => {
   try {
-    const { page = 1, limit = 10 } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      sortBy,
+      order,
+      search,
+      searchField,
+    } = req.query;
     const result = await invoiceService.getAllInvoices(
       req.user.id,
       req.user.type,
       page,
-      limit
+      limit,
+      sortBy,
+      order,
+      search,
+      searchField
     );
     res.json(result);
   } catch (err) {
@@ -21,6 +34,9 @@ const createInvoice = async (req, res) => {
   try {
     const invoiceData = { ...req.body, userId: req.user.id };
     const invoice = await invoiceService.createInvoice(invoiceData);
+
+    await agregarFacturaACola({ facturaId: "factura.id", datos: "factura" });
+
     res.status(201).json(invoice);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -83,6 +99,16 @@ const generatePdf = async (req, res) => {
   }
 };
 
+const getNextNumber = async (req, res) => {
+  try {
+    const { serie } = req.query;
+    const nextNumber = await invoiceService.getNextInvoiceNumber(serie);
+    res.json({ nextNumber });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   getInvoices,
   createInvoice,
@@ -90,4 +116,5 @@ module.exports = {
   updateInvoice,
   deleteInvoice,
   generatePdf,
+  getNextNumber,
 };

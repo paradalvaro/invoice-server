@@ -11,6 +11,7 @@ router.get("/next-number", invoiceController.getNextNumber);
 router.post("/", invoiceController.createInvoice);
 router.get("/:id", invoiceController.getInvoice);
 router.get("/:id/pdf", invoiceController.generatePdf);
+router.get("/:id/sendEmail", invoiceController.sendInvoiceByEmail);
 router.put("/:id", roleMiddleware, invoiceController.updateInvoice);
 router.delete("/:id", roleMiddleware, invoiceController.deleteInvoice);
 

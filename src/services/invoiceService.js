@@ -19,11 +19,13 @@ const getAllInvoices = async (
     // Validate allowed fields for security
     const allowedFields = [
       "clientName",
+      "clientNIF",
       "invoiceNumber",
       "status",
       "date",
       "dueDate",
       "serie",
+      "type",
     ];
     const field = allowedFields.includes(searchField)
       ? searchField
@@ -73,7 +75,6 @@ const getAllInvoices = async (
 
 const createInvoice = async (invoiceData) => {
   const invoice = new Invoice(invoiceData);
-  console.log(invoice);
   return await invoice.save();
 };
 
@@ -86,12 +87,17 @@ const getInvoiceById = async (id, userId) => {
 };
 
 const updateInvoice = async (id, userId, updateData) => {
+  if (updateData.services && Array.isArray(updateData.services)) {
+    updateData.totalAmount = updateData.services.reduce(
+      (acc, service) => acc + (service.taxBase + service.iva),
+      0
+    );
+  }
   const invoice = await Invoice.findOneAndUpdate(
     { _id: id, userId },
     updateData,
     { new: true }
   );
-  console.log(invoice);
   if (!invoice) {
     throw new Error("Invoice not found");
   }
@@ -117,6 +123,27 @@ const getNextInvoiceNumber = async (serie) => {
   return 1;
 };
 
+const getInvoiceBySerieAndNumber = async (serie, invoiceNumber) => {
+  const invoice = await Invoice.findOne({
+    serie: serie,
+    invoiceNumber: invoiceNumber,
+  });
+  if (!invoice) {
+    throw new Error("Invoice not found");
+  }
+  return invoice;
+};
+
+const getInvoicePreviousHash = async (serie, invoiceNumber) => {
+  let previousHash = "";
+  try {
+    previousHash = await getInvoiceBySerieAndNumber(serie, invoiceNumber - 1);
+  } catch (error) {
+    console.log(error);
+  }
+  return previousHash.hash || "";
+};
+
 module.exports = {
   getAllInvoices,
   createInvoice,
@@ -124,4 +151,6 @@ module.exports = {
   updateInvoice,
   deleteInvoice,
   getNextInvoiceNumber,
+  getInvoiceBySerieAndNumber,
+  getInvoicePreviousHash,
 };

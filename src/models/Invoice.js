@@ -8,8 +8,14 @@ const InvoiceSchema = new mongoose.Schema({
   },
   serie: {
     type: String,
-    enum: ["A2025", "A2026"],
+    enum: ["A2025", "A2026", "R2025", "R2026"],
     default: "A2025",
+  },
+  type: {
+    type: String,
+    enum: ["F1", "F2", "R1", "R4"],
+    required: true,
+    default: "F1",
   },
   invoiceNumber: {
     type: Number,
@@ -17,8 +23,42 @@ const InvoiceSchema = new mongoose.Schema({
   },
   clientName: {
     type: String,
-    required: true,
+    required: function () {
+      return this.type !== "F2";
+    },
   },
+  clientNIF: {
+    type: String,
+    required: function () {
+      return this.type !== "F2";
+    },
+    validate: {
+      validator: function (v) {
+        if (this.type === "F2" && !v) return true;
+        // Individual NIF (DNI): 8 digits + 1 control character
+        const individualDniRegex = /^[0-9]{8}[A-Z]$/;
+        // Individual NIF (Non-resident): L/M + 7 digits + 1 control character
+        const individualNonResidentRegex = /^[LM][0-9]{7}[A-Z]$/;
+        // Business NIF: Letter (A-W) + 7 digits + 1 control character (can be letter or digit)
+        const businessNifRegex = /^[ABCDEFGHJNPQRSUVW][0-9]{7}[A-Z0-9]$/;
+
+        return (
+          individualDniRegex.test(v) ||
+          individualNonResidentRegex.test(v) ||
+          businessNifRegex.test(v)
+        );
+      },
+      message: (props) => `${props.value} is not a valid NIF!`,
+    },
+  },
+  services: [
+    {
+      concept: { type: String, required: true },
+      quantity: { type: Number, required: true, default: 1 },
+      taxBase: { type: Number, required: true },
+      iva: { type: Number, required: true },
+    },
+  ],
   totalAmount: {
     type: Number,
     required: true,
@@ -36,6 +76,36 @@ const InvoiceSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  hash: {
+    type: String,
+    required: true,
+  },
+  rectifyInvoice: {
+    type: String,
+    required: function () {
+      return /^(R1|R4)$/.test(this.type);
+    },
+  },
+  rectifyReason: {
+    type: String,
+    enum: ["Return"],
+    default: "Return",
+    required: function () {
+      return /^(R1|R4)$/.test(this.type);
+    },
+  },
+});
+
+InvoiceSchema.pre("validate", async function () {
+  if (this.services && this.services.length > 0) {
+    this.totalAmount = this.services.reduce(
+      (acc, service) =>
+        acc +
+        (parseFloat(service.taxBase) * parseFloat(service.quantity) +
+          parseFloat(service.iva)),
+      0
+    );
+  }
 });
 
 module.exports = mongoose.model("Invoice", InvoiceSchema);

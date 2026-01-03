@@ -4,6 +4,8 @@ const pdfService = require("../services/pdfService");
 
 const { agregarFacturaACola } = require("../queues/invoiceQueue");
 
+const utils = require("../utils/utils");
+
 const getInvoices = async (req, res) => {
   try {
     const {
@@ -32,10 +34,15 @@ const getInvoices = async (req, res) => {
 
 const createInvoice = async (req, res) => {
   try {
-    const invoiceData = { ...req.body, userId: req.user.id };
+    const previousHash = await invoiceService.getInvoicePreviousHash(
+      req.body.serie,
+      req.body.invoiceNumber
+    );
+    const hash = utils.makeInvoiceHash(req.body, previousHash);
+    const invoiceData = { ...req.body, userId: req.user.id, hash };
     const invoice = await invoiceService.createInvoice(invoiceData);
 
-    await agregarFacturaACola({ facturaId: "factura.id", datos: "factura" });
+    await agregarFacturaACola({ invoice });
 
     res.status(201).json(invoice);
   } catch (err) {
@@ -86,7 +93,7 @@ const generatePdf = async (req, res) => {
 
     const stream = res.writeHead(200, {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment;filename=invoice-${invoice.invoiceNumber}.pdf`,
+      "Content-Disposition": `attachment;filename=invoice-${invoice.serie}${invoice.invoiceNumber}.pdf`,
     });
 
     pdfService.buildPDF(
@@ -94,6 +101,29 @@ const generatePdf = async (req, res) => {
       (chunk) => stream.write(chunk),
       () => stream.end()
     );
+  } catch (err) {
+    res.status(404).json({ message: err.message });
+  }
+};
+
+const sendInvoiceByEmail = async (req, res) => {
+  try {
+    const invoice = await invoiceService.getInvoiceById(
+      req.params.id,
+      req.user.id
+    );
+    let buffers = [];
+
+    pdfService.buildPDF(invoice, buffers.push.bind(buffers), async () => {
+      try {
+        const pdfBuffer = Buffer.concat(buffers);
+        await pdfService.sendPDFInvoiceByEmail(pdfBuffer, invoice);
+        res.json({ message: "Invoice sent by email" });
+      } catch (emailErr) {
+        console.error("Error sending email:", emailErr);
+        res.status(500).json({ message: "Error sending invoice by email" });
+      }
+    });
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
@@ -117,4 +147,5 @@ module.exports = {
   deleteInvoice,
   generatePdf,
   getNextNumber,
+  sendInvoiceByEmail,
 };

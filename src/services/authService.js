@@ -32,7 +32,7 @@ const registerUser = async (
     { id: user._id, type: user.type },
     process.env.JWT_SECRET,
     {
-      expiresIn: "1h",
+      expiresIn: "2h",
     }
   );
 

@@ -8,13 +8,81 @@ const getAllInvoices = async (
   sortBy = "date",
   order = "desc",
   search = "",
-  searchField = "clientName"
+  searchField = "clientName",
+  status = "",
+  dueDateRange = ""
 ) => {
   const skip = (page - 1) * limit;
 
   const filter =
     userType === "Admin" || userType === "SuperAdmin" ? {} : { userId };
 
+  // Status Filter
+  if (status) {
+    filter.status = status;
+  }
+
+  // Due Date Range Filter
+  if (dueDateRange) {
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+
+    if (dueDateRange === "thisMonth") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+        23,
+        59,
+        59
+      );
+      filter.dueDate = { $gte: startOfMonth, $lte: endOfMonth };
+    } else if (dueDateRange === "nextMonth") {
+      const startOfNextMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        1
+      );
+      const endOfNextMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 2,
+        0,
+        23,
+        59,
+        59
+      );
+      filter.dueDate = { $gte: startOfNextMonth, $lte: endOfNextMonth };
+    } else if (dueDateRange === "moreThanTwoMonths") {
+      const endOfNextMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 2,
+        0,
+        23,
+        59,
+        59
+      );
+      filter.dueDate = { $gt: endOfNextMonth };
+    } else if (dueDateRange === "next30Days") {
+      const date30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      filter.dueDate = { $gte: startOfToday, $lte: date30 };
+    } else if (dueDateRange === "next60Days") {
+      const date60 = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+      filter.dueDate = { $gte: startOfToday, $lte: date60 };
+    } else if (dueDateRange === "next90Days") {
+      const date90 = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      filter.dueDate = { $gte: startOfToday, $lte: date90 };
+    } else if (dueDateRange === "moreThan90Days") {
+      const date90 = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      filter.dueDate = { $gt: date90 };
+    }
+  }
+
+  // General Search Filter
   if (search) {
     // Validate allowed fields for security
     const allowedFields = [
@@ -37,10 +105,13 @@ const getAllInvoices = async (
       endDate.setDate(endDate.getDate() + 1);
 
       if (!isNaN(startDate.getTime())) {
-        filter[field] = {
-          $gte: startDate,
-          $lt: endDate,
-        };
+        // Only override if not already set by dueDateRange
+        if (!filter[field]) {
+          filter[field] = {
+            $gte: startDate,
+            $lt: endDate,
+          };
+        }
       }
     } else if (field === "invoiceNumber") {
       const numSearch = Number(search);
@@ -129,7 +200,8 @@ const getInvoiceBySerieAndNumber = async (serie, invoiceNumber) => {
     invoiceNumber: invoiceNumber,
   });
   if (!invoice) {
-    throw new Error("Invoice not found");
+    //throw new Error("Invoice not found");
+    return "";
   }
   return invoice;
 };

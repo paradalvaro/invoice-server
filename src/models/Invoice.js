@@ -9,7 +9,9 @@ const InvoiceSchema = new mongoose.Schema({
   serie: {
     type: String,
     enum: ["A2025", "A2026", "R2025", "R2026"],
-    default: "A2025",
+    required: function () {
+      return this.status !== "Draft";
+    },
   },
   type: {
     type: String,
@@ -19,18 +21,25 @@ const InvoiceSchema = new mongoose.Schema({
   },
   invoiceNumber: {
     type: Number,
-    required: true,
+    required: function () {
+      return this.status !== "Draft";
+    },
+  },
+  client: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Client",
+    required: false,
   },
   clientName: {
     type: String,
     required: function () {
-      return this.type !== "F2";
+      return this.type !== "F2" && this.status !== "Draft";
     },
   },
   clientNIF: {
     type: String,
     required: function () {
-      return this.type !== "F2";
+      return this.type !== "F2" && this.status !== "Draft";
     },
     validate: {
       validator: function (v) {
@@ -74,11 +83,15 @@ const InvoiceSchema = new mongoose.Schema({
   },
   date: {
     type: Date,
-    default: Date.now,
+    required: function () {
+      return this.status !== "Draft";
+    },
   },
   hash: {
     type: String,
-    required: true,
+    required: function () {
+      return this.status !== "Draft";
+    },
   },
   rectifyInvoice: {
     type: String,

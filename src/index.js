@@ -39,6 +39,7 @@ connectDB();
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/api/clients", require("./routes/clientRoutes"));
 
 const PORT = process.env.PORT || 5000;
 

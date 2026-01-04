@@ -15,6 +15,8 @@ const getInvoices = async (req, res) => {
       order,
       search,
       searchField,
+      status,
+      dueDateRange,
     } = req.query;
     const result = await invoiceService.getAllInvoices(
       req.user.id,
@@ -24,7 +26,9 @@ const getInvoices = async (req, res) => {
       sortBy,
       order,
       search,
-      searchField
+      searchField,
+      status,
+      dueDateRange
     );
     res.json(result);
   } catch (err) {
@@ -34,6 +38,11 @@ const getInvoices = async (req, res) => {
 
 const createInvoice = async (req, res) => {
   try {
+    if (req.body.status === "Draft") {
+      const invoiceData = { ...req.body, userId: req.user.id };
+      const invoice = await invoiceService.createInvoice(invoiceData);
+      return res.status(201).json(invoice);
+    }
     const previousHash = await invoiceService.getInvoicePreviousHash(
       req.body.serie,
       req.body.invoiceNumber
@@ -42,7 +51,7 @@ const createInvoice = async (req, res) => {
     const invoiceData = { ...req.body, userId: req.user.id, hash };
     const invoice = await invoiceService.createInvoice(invoiceData);
 
-    await agregarFacturaACola({ invoice });
+    //await agregarFacturaACola({ invoice });
 
     res.status(201).json(invoice);
   } catch (err) {

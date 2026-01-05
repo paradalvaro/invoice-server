@@ -13,6 +13,7 @@ router.get("/:id", invoiceController.getInvoice);
 router.get("/:id/pdf", invoiceController.generatePdf);
 router.get("/:id/sendEmail", invoiceController.sendInvoiceByEmail);
 router.put("/:id", roleMiddleware, invoiceController.updateInvoice);
+router.put("/:id/paid", roleMiddleware, invoiceController.markAsPaid);
 router.delete("/:id", roleMiddleware, invoiceController.deleteInvoice);
 
 module.exports = router;

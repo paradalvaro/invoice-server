@@ -72,6 +72,12 @@ const InvoiceSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  balanceDue: {
+    type: Number,
+    required: function () {
+      return this.status !== "Draft";
+    },
+  },
   status: {
     type: String,
     enum: ["Draft", "Pending", "Paid"],
@@ -101,8 +107,6 @@ const InvoiceSchema = new mongoose.Schema({
   },
   rectifyReason: {
     type: String,
-    enum: ["Return"],
-    default: "Return",
     required: function () {
       return /^(R1|R4)$/.test(this.type);
     },
@@ -118,6 +122,15 @@ InvoiceSchema.pre("validate", async function () {
           parseFloat(service.iva)),
       0
     );
+  }
+
+  // Initialize balanceDue if not present
+  if (this.balanceDue === undefined) {
+    if (this.status === "Paid") {
+      this.balanceDue = 0;
+    } else {
+      this.balanceDue = this.totalAmount || 0;
+    }
   }
 });
 

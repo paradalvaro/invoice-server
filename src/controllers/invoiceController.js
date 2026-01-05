@@ -148,6 +148,15 @@ const getNextNumber = async (req, res) => {
   }
 };
 
+const markAsPaid = async (req, res) => {
+  try {
+    const invoice = await invoiceService.markAsPaid(req.params.id, req.user.id);
+    res.json(invoice);
+  } catch (err) {
+    res.status(404).json({ message: err.message });
+  }
+};
+
 module.exports = {
   getInvoices,
   createInvoice,
@@ -156,5 +165,8 @@ module.exports = {
   deleteInvoice,
   generatePdf,
   getNextNumber,
+  generatePdf,
+  getNextNumber,
   sendInvoiceByEmail,
+  markAsPaid,
 };

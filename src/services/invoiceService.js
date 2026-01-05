@@ -136,11 +136,62 @@ const getAllInvoices = async (
   const totalItems = await Invoice.countDocuments(filter);
   const totalPages = Math.ceil(totalItems / limit);
 
+  // Calculate totals for Balance Bar
+  const now = new Date();
+  const totalsAggregation = await Invoice.aggregate([
+    { $match: filter },
+    {
+      $group: {
+        _id: null,
+        paid: {
+          $sum: {
+            $cond: [{ $eq: ["$status", "Paid"] }, "$totalAmount", 0],
+          },
+        },
+        pending: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ["$status", "Pending"] },
+                  { $gte: ["$dueDate", now] },
+                ],
+              },
+              "$totalAmount",
+              0,
+            ],
+          },
+        },
+        expired: {
+          $sum: {
+            $cond: [
+              {
+                $and: [
+                  { $eq: ["$status", "Pending"] },
+                  { $lt: ["$dueDate", now] },
+                ],
+              },
+              "$totalAmount",
+              0,
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  const totals =
+    totalsAggregation.length > 0
+      ? totalsAggregation[0]
+      : { paid: 0, pending: 0, expired: 0 };
+  delete totals._id;
+
   return {
     data: invoices,
     currentPage: Number(page),
     totalPages,
     totalItems,
+    totals,
   };
 };
 
@@ -163,6 +214,18 @@ const updateInvoice = async (id, userId, updateData) => {
       (acc, service) => acc + (service.taxBase + service.iva),
       0
     );
+  }
+
+  // Update balanceDue if totalAmount changes and not paid
+  // This logic is simple; if amount changes, reset balanceDue to new amount unless it's paid.
+  // However, for more complex partial payments, this would need to be smarter.
+  // Given requirements, let's just ensure if status changes to Paid, balanceDue is 0.
+
+  if (updateData.status === "Paid") {
+    updateData.balanceDue = 0;
+  } else if (updateData.totalAmount !== undefined) {
+    // If total amount changes and we are not paying, reset balance due (assuming no partial payments yet)
+    updateData.balanceDue = updateData.totalAmount;
   }
   const invoice = await Invoice.findOneAndUpdate(
     { _id: id, userId },
@@ -225,4 +288,17 @@ module.exports = {
   getNextInvoiceNumber,
   getInvoiceBySerieAndNumber,
   getInvoicePreviousHash,
+  markAsPaid,
 };
+
+async function markAsPaid(id, userId) {
+  const invoice = await Invoice.findOneAndUpdate(
+    { _id: id, userId },
+    { status: "Paid", balanceDue: 0 },
+    { new: true }
+  );
+  if (!invoice) {
+    throw new Error("Invoice not found");
+  }
+  return invoice;
+}

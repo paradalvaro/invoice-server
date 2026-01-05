@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Invoice = require("../models/Invoice");
 
 const getAllInvoices = async (
@@ -16,6 +17,19 @@ const getAllInvoices = async (
 
   const filter =
     userType === "Admin" || userType === "SuperAdmin" ? {} : { userId };
+
+  // Explicitly cast userId to ObjectId for aggregation if it's in the filter
+  if (filter.userId && typeof filter.userId === "string") {
+    filter.userId = new mongoose.Types.ObjectId(filter.userId);
+  } else if (
+    filter.userId &&
+    filter.userId instanceof mongoose.Types.ObjectId === false
+  ) {
+    // If it's already an object but not an ObjectId (e.g. from a previous check),
+    // we ensure it's the right type for the aggregation $match stage if necessary.
+    // In this service, it coming from req.user.id is usually a string.
+    filter.userId = new mongoose.Types.ObjectId(filter.userId);
+  }
 
   // Status Filter
   if (status) {

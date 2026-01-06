@@ -2,8 +2,8 @@ const PDFDocument = require("pdfkit");
 const QRCode = require("qrcode");
 const nodemailer = require("nodemailer");
 
-const email = "paradalvaro@gmail.com";
-const password = "xnxg xrls iejs vhfy";
+const email = process.env.EMAIL;
+const password = process.env.PASSWORD;
 
 const buildPDF = async (invoice, dataCallback, endCallback) => {
   const doc = new PDFDocument();
@@ -72,7 +72,7 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   doc.end();
 };
 
-const sendPDFInvoiceByEmail = async (pdfBuffer, invoice) => {
+const sendPDFInvoiceByEmail = async (pdfBuffer, invoice, emails) => {
   const transporter = nodemailer.createTransport({
     //host: process.env.SMTP_HOST,
     //port: process.env.SMTP_PORT,
@@ -86,7 +86,7 @@ const sendPDFInvoiceByEmail = async (pdfBuffer, invoice) => {
 
   const mailOptions = {
     from: email,
-    to: email,
+    to: emails || email,
     subject: `Factura ${invoice.serie}${invoice.invoiceNumber} generada`,
     text: "Adjunto encontrará su factura en formato PDF.",
     //html: '<b>PDF Invoice</b><p>PDF Invoice</p>',

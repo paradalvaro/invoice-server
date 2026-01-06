@@ -121,12 +121,13 @@ const sendInvoiceByEmail = async (req, res) => {
       req.params.id,
       req.user.id
     );
+    const { emails } = req.body;
     let buffers = [];
 
     pdfService.buildPDF(invoice, buffers.push.bind(buffers), async () => {
       try {
         const pdfBuffer = Buffer.concat(buffers);
-        await pdfService.sendPDFInvoiceByEmail(pdfBuffer, invoice);
+        await pdfService.sendPDFInvoiceByEmail(pdfBuffer, invoice, emails);
         res.json({ message: "Invoice sent by email" });
       } catch (emailErr) {
         console.error("Error sending email:", emailErr);

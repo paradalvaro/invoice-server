@@ -57,10 +57,7 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   // So from server/src/services (where this file is ideally), we go: ../../../client/public
   // But process.cwd() is likely the server root "d:\Proyectos Ramiro\Proyecto Facturas\server" or just "d:\Proyectos Ramiro\Proyecto Facturas" depending on how it's started.
   // Reliable way: try absolute path based on known structure or relative to __dirname.
-  const logoPath = path.resolve(
-    __dirname,
-    "../../../client/public/VerSalIT-bg.png"
-  );
+  const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
 
   try {
     doc.image(logoPath, 50, 45, { width: 150 });
@@ -304,7 +301,7 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   doc.fontSize(6).font("Helvetica").fillColor("grey");
   doc.text(
     invoice.legalText ||
-      "Responsable del tratamiento: Versal-IT: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). Puede consultar los plazos de conservación en nuestra política de privacidad en info@versal-it.es / https://versal-it.com/ | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es / https://versal-it.com/ o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”. Si considera que sus derechos han sido vulnerados, puede interponer una reclamación ante la AEPD.",
+      "Responsable del tratamiento: VerSal-IT: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). Puede consultar los plazos de conservación en nuestra política de privacidad en info@versal-it.es / https://versal-it.com/ | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es / https://versal-it.com/ o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”. Si considera que sus derechos han sido vulnerados, puede interponer una reclamación ante la AEPD.",
     50,
     currentY + 20,
     { width: 500, align: "justify" }
@@ -318,7 +315,7 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   doc.fontSize(8).fillColor("black");
 
   // Left: Company Info
-  doc.font("Helvetica-Bold").text("Versal-IT", 50, bankInfoY);
+  doc.font("Helvetica-Bold").text("VerSal-IT", 50, bankInfoY);
   doc.font("Helvetica").fontSize(7);
   doc.text("Avenida Barcelona", 50, bankInfoY + 10);
   doc.text("14010 Córdoba", 50, bankInfoY + 18);

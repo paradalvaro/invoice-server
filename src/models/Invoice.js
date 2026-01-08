@@ -60,14 +60,24 @@ const InvoiceSchema = new mongoose.Schema({
       message: (props) => `${props.value} is not a valid NIF!`,
     },
   },
-  services: [
-    {
-      concept: { type: String, required: true },
-      quantity: { type: Number, required: true, default: 1 },
-      taxBase: { type: Number, required: true },
-      iva: { type: Number, required: true },
+  services: {
+    type: [
+      {
+        concept: { type: String, required: true },
+        quantity: { type: Number, required: true, default: 1 },
+        taxBase: { type: Number, required: true },
+        discount: { type: Number, default: 0 },
+        iva: { type: Number, required: true, default: 21 },
+      },
+    ],
+    required: true,
+    validate: {
+      validator: function (v) {
+        return Array.isArray(v) && v.length > 0;
+      },
+      message: "Debes agregar al menos un servicio a la factura.",
     },
-  ],
+  },
   totalAmount: {
     type: Number,
     required: true,
@@ -115,13 +125,19 @@ const InvoiceSchema = new mongoose.Schema({
 
 InvoiceSchema.pre("validate", async function () {
   if (this.services && this.services.length > 0) {
-    this.totalAmount = this.services.reduce(
-      (acc, service) =>
-        acc +
-        (parseFloat(service.taxBase) * parseFloat(service.quantity) +
-          parseFloat(service.iva)),
-      0
-    );
+    this.totalAmount = this.services.reduce((acc, service) => {
+      const base = parseFloat(service.taxBase);
+      const quantity = parseFloat(service.quantity);
+      const discount = parseFloat(service.discount) || 0;
+      const ivaPercent = parseFloat(service.iva) || 0;
+
+      const subtotal = base * quantity;
+      const discountAmount = subtotal * (discount / 100);
+      const taxableAmount = subtotal - discountAmount;
+      const ivaAmount = taxableAmount * (ivaPercent / 100);
+
+      return acc + taxableAmount + ivaAmount;
+    }, 0);
   }
 
   // Initialize balanceDue if not present

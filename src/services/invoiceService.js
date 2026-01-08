@@ -215,7 +215,7 @@ const createInvoice = async (invoiceData) => {
 };
 
 const getInvoiceById = async (id, userId) => {
-  const invoice = await Invoice.findOne({ _id: id, userId });
+  const invoice = await Invoice.findOne({ _id: id, userId }).populate("client");
   if (!invoice) {
     throw new Error("Invoice not found");
   }

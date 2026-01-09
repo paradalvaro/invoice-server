@@ -214,46 +214,53 @@ const createInvoice = async (invoiceData) => {
   return await invoice.save();
 };
 
-const getInvoiceById = async (id, userId) => {
-  const invoice = await Invoice.findOne({ _id: id, userId }).populate("client");
+const getInvoiceById = async (id, userId, userType) => {
+  const filter =
+    userType === "Admin" || userType === "SuperAdmin"
+      ? { _id: id }
+      : { _id: id, userId };
+  const invoice = await Invoice.findOne(filter).populate("client");
   if (!invoice) {
     throw new Error("Invoice not found");
   }
   return invoice;
 };
 
-const updateInvoice = async (id, userId, updateData) => {
+const updateInvoice = async (id, userId, userType, updateData) => {
   if (updateData.services && Array.isArray(updateData.services)) {
     updateData.totalAmount = updateData.services.reduce(
-      (acc, service) => acc + (service.taxBase + service.iva),
+      (acc, service) => acc + (service.taxBase + (service.iva || 0)),
       0
     );
   }
 
   // Update balanceDue if totalAmount changes and not paid
-  // This logic is simple; if amount changes, reset balanceDue to new amount unless it's paid.
-  // However, for more complex partial payments, this would need to be smarter.
-  // Given requirements, let's just ensure if status changes to Paid, balanceDue is 0.
-
   if (updateData.status === "Paid") {
     updateData.balanceDue = 0;
   } else if (updateData.totalAmount !== undefined) {
-    // If total amount changes and we are not paying, reset balance due (assuming no partial payments yet)
     updateData.balanceDue = updateData.totalAmount;
   }
-  const invoice = await Invoice.findOneAndUpdate(
-    { _id: id, userId },
-    updateData,
-    { new: true }
-  );
+
+  const filter =
+    userType === "Admin" || userType === "SuperAdmin"
+      ? { _id: id }
+      : { _id: id, userId };
+
+  const invoice = await Invoice.findOneAndUpdate(filter, updateData, {
+    new: true,
+  });
   if (!invoice) {
     throw new Error("Invoice not found");
   }
   return invoice;
 };
 
-const deleteInvoice = async (id, userId) => {
-  const invoice = await Invoice.findOneAndDelete({ _id: id, userId });
+const deleteInvoice = async (id, userId, userType) => {
+  const filter =
+    userType === "Admin" || userType === "SuperAdmin"
+      ? { _id: id }
+      : { _id: id, userId };
+  const invoice = await Invoice.findOneAndDelete(filter);
   if (!invoice) {
     throw new Error("Invoice not found");
   }
@@ -305,9 +312,13 @@ module.exports = {
   markAsPaid,
 };
 
-async function markAsPaid(id, userId) {
+async function markAsPaid(id, userId, userType) {
+  const filter =
+    userType === "Admin" || userType === "SuperAdmin"
+      ? { _id: id }
+      : { _id: id, userId };
   const invoice = await Invoice.findOneAndUpdate(
-    { _id: id, userId },
+    filter,
     { status: "Paid", balanceDue: 0 },
     { new: true }
   );

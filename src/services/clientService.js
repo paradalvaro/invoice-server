@@ -5,8 +5,8 @@ const createClient = async (clientData) => {
   return await client.save();
 };
 
-const getClients = async (userId, page = 1, limit = 10, search = "") => {
-  const query = { userId };
+const getClients = async (page = 1, limit = 10, search = "") => {
+  const query = {};
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: "i" } },
@@ -29,28 +29,24 @@ const getClients = async (userId, page = 1, limit = 10, search = "") => {
   };
 };
 
-const getClientById = async (id, userId) => {
-  const client = await Client.findOne({ _id: id, userId });
+const getClientById = async (id) => {
+  const client = await Client.findById(id);
   if (!client) {
     throw new Error("Client not found");
   }
   return client;
 };
 
-const updateClient = async (id, userId, updateData) => {
-  const client = await Client.findOneAndUpdate(
-    { _id: id, userId },
-    updateData,
-    { new: true }
-  );
+const updateClient = async (id, updateData) => {
+  const client = await Client.findByIdAndUpdate(id, updateData, { new: true });
   if (!client) {
     throw new Error("Client not found");
   }
   return client;
 };
 
-const deleteClient = async (id, userId) => {
-  const client = await Client.findOneAndDelete({ _id: id, userId });
+const deleteClient = async (id) => {
+  const client = await Client.findByIdAndDelete(id);
   if (!client) {
     throw new Error("Client not found");
   }

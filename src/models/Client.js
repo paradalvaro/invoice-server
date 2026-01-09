@@ -65,8 +65,7 @@ const ClientSchema = new mongoose.Schema(
   }
 );
 
-// Compound index to ensure NIF is unique per user (if clients are user-specific)
-// Or just unique globally if appropriate. Assuming per-user based on Invoice model containing userId.
-ClientSchema.index({ userId: 1, nif: 1 }, { unique: true });
+// Index to ensure NIF is unique globally since clients are now shared among all users.
+ClientSchema.index({ nif: 1 }, { unique: true });
 
 module.exports = mongoose.model("Client", ClientSchema);

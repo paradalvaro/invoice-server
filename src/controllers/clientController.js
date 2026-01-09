@@ -14,7 +14,6 @@ const getClients = async (req, res) => {
   try {
     const { page = 1, limit = 10, search } = req.query;
     const result = await clientService.getClients(
-      req.user.id,
       parseInt(page),
       parseInt(limit),
       search
@@ -27,10 +26,7 @@ const getClients = async (req, res) => {
 
 const getClient = async (req, res) => {
   try {
-    const client = await clientService.getClientById(
-      req.params.id,
-      req.user.id
-    );
+    const client = await clientService.getClientById(req.params.id);
     res.json(client);
   } catch (err) {
     res.status(404).json({ message: err.message });
@@ -39,11 +35,7 @@ const getClient = async (req, res) => {
 
 const updateClient = async (req, res) => {
   try {
-    const client = await clientService.updateClient(
-      req.params.id,
-      req.user.id,
-      req.body
-    );
+    const client = await clientService.updateClient(req.params.id, req.body);
     res.json(client);
   } catch (err) {
     res.status(404).json({ message: err.message });
@@ -52,7 +44,7 @@ const updateClient = async (req, res) => {
 
 const deleteClient = async (req, res) => {
   try {
-    await clientService.deleteClient(req.params.id, req.user.id);
+    await clientService.deleteClient(req.params.id);
     res.json({ message: "Client removed" });
   } catch (err) {
     res.status(404).json({ message: err.message });

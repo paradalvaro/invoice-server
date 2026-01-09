@@ -63,7 +63,8 @@ const getInvoice = async (req, res) => {
   try {
     const invoice = await invoiceService.getInvoiceById(
       req.params.id,
-      req.user.id
+      req.user.id,
+      req.user.type
     );
     res.json(invoice);
   } catch (err) {
@@ -76,6 +77,7 @@ const updateInvoice = async (req, res) => {
     const invoice = await invoiceService.updateInvoice(
       req.params.id,
       req.user.id,
+      req.user.type,
       req.body
     );
     res.json(invoice);
@@ -86,7 +88,11 @@ const updateInvoice = async (req, res) => {
 
 const deleteInvoice = async (req, res) => {
   try {
-    await invoiceService.deleteInvoice(req.params.id, req.user.id);
+    await invoiceService.deleteInvoice(
+      req.params.id,
+      req.user.id,
+      req.user.type
+    );
     res.json({ message: "Invoice removed" });
   } catch (err) {
     res.status(404).json({ message: err.message });
@@ -97,7 +103,8 @@ const generatePdf = async (req, res) => {
   try {
     const invoice = await invoiceService.getInvoiceById(
       req.params.id,
-      req.user.id
+      req.user.id,
+      req.user.type
     );
 
     const stream = res.writeHead(200, {
@@ -119,7 +126,8 @@ const sendInvoiceByEmail = async (req, res) => {
   try {
     const invoice = await invoiceService.getInvoiceById(
       req.params.id,
-      req.user.id
+      req.user.id,
+      req.user.type
     );
     const { emails } = req.body;
     let buffers = [];
@@ -151,7 +159,11 @@ const getNextNumber = async (req, res) => {
 
 const markAsPaid = async (req, res) => {
   try {
-    const invoice = await invoiceService.markAsPaid(req.params.id, req.user.id);
+    const invoice = await invoiceService.markAsPaid(
+      req.params.id,
+      req.user.id,
+      req.user.type
+    );
     res.json(invoice);
   } catch (err) {
     res.status(404).json({ message: err.message });

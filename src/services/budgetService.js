@@ -79,37 +79,53 @@ const createBudget = async (budgetData) => {
   return await budget.save();
 };
 
-const getBudgetById = async (id, userId) => {
-  const budget = await Budget.findOne({ _id: id, userId }).populate("client");
+const getBudgetById = async (id, userId, userType) => {
+  const filter =
+    userType === "Admin" || userType === "SuperAdmin"
+      ? { _id: id }
+      : { _id: id, userId };
+  const budget = await Budget.findOne(filter)
+    .populate("client")
+    .populate("userId", "username name lastName");
   if (!budget) {
     throw new Error("Budget not found");
   }
   return budget;
 };
 
-const updateBudget = async (id, userId, updateData) => {
+const updateBudget = async (id, userId, userType, updateData) => {
+  const filter =
+    userType === "Admin" || userType === "SuperAdmin"
+      ? { _id: id }
+      : { _id: id, userId };
   // Model pre-validate handles totalAmount recalculation
-  const budget = await Budget.findOneAndUpdate(
-    { _id: id, userId },
-    updateData,
-    { new: true, runValidators: true }
-  );
+  const budget = await Budget.findOneAndUpdate(filter, updateData, {
+    new: true,
+    runValidators: true,
+  })
+    .populate("client")
+    .populate("userId", "username name lastName");
   if (!budget) {
     throw new Error("Budget not found");
   }
   return budget;
 };
 
-const deleteBudget = async (id, userId) => {
-  const budget = await Budget.findOneAndDelete({ _id: id, userId });
+const deleteBudget = async (id, userId, userType) => {
+  const filter =
+    userType === "Admin" || userType === "SuperAdmin"
+      ? { _id: id }
+      : { _id: id, userId };
+  const budget = await Budget.findOneAndDelete(filter);
   if (!budget) {
     throw new Error("Budget not found");
   }
   return budget;
 };
 
-const getNextBudgetNumber = async () => {
-  const lastBudget = await Budget.findOne()
+const getNextBudgetNumber = async (serie) => {
+  if (!serie) return 1;
+  const lastBudget = await Budget.findOne({ serie })
     .sort({ budgetNumber: -1 })
     .collation({ locale: "en_US", numericOrdering: true });
 

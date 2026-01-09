@@ -380,4 +380,217 @@ const sendPDFInvoiceByEmail = async (pdfBuffer, invoice, emails) => {
     throw error;
   }
 };
-module.exports = { buildPDF, sendPDFInvoiceByEmail };
+const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
+  const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+  doc.on("data", dataCallback);
+  doc.on("end", endCallback);
+
+  // --- Header Section ---
+
+  // Logo
+  const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
+  try {
+    doc.image(logoPath, 50, 45, { width: 150 });
+  } catch (err) {
+    console.warn("Logo not found at:", logoPath);
+    doc.fontSize(20).text("VerSalIT", 50, 45);
+  }
+
+  doc.moveDown(4);
+
+  // Title
+  doc.fontSize(16).font("Helvetica-Bold").text("Oferta venta", 50, 150);
+
+  // Invoice Details (Left side)
+  const leftX = 50;
+  let currentY = 175;
+  const col1Width = 150;
+
+  doc.fontSize(10).font("Helvetica");
+  doc.text("Fecha emisión documento", leftX, currentY);
+  doc
+    .font("Helvetica-Bold")
+    .text(formatDate(budget.date), leftX + col1Width, currentY);
+  currentY += 15;
+
+  doc.font("Helvetica").text("Nº", leftX, currentY);
+  doc
+    .font("Helvetica-Bold")
+    .text(
+      `${budget.serie || ""}${budget.budgetNumber || ""}`,
+      leftX + col1Width,
+      currentY
+    );
+  currentY += 15;
+
+  doc.font("Helvetica").text("Pág.", leftX, currentY);
+  doc.font("Helvetica-Bold").text("1", leftX + col1Width, currentY);
+
+  // Client Info Box (Right side)
+  const clientX = 350;
+  let clientY = 150;
+
+  if (budget.client && typeof budget.client === "object") {
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text(budget.client.name, clientX, clientY);
+    clientY += 20;
+
+    doc.fontSize(10).font("Helvetica");
+    // Line 2: (Picture shows "Parcela 56" which is not in our model usually, so we skip or if address has multiple lines)
+    // Actually the user said: "the 'A/A' is only the field address. the rest of the fields related to the address are showed before like its in the picture"
+    // So the previous lines are CP City, Province, Country.
+
+    if (budget.client.postalCode || budget.client.city) {
+      doc.text(
+        `${budget.client.postalCode || ""} ${budget.client.city || ""}`.trim(),
+        clientX,
+        clientY
+      );
+      clientY += 15;
+    }
+    if (budget.client.province) {
+      doc.text(budget.client.province, clientX, clientY);
+      clientY += 15;
+    }
+    if (budget.client.country) {
+      doc.text(budget.client.country, clientX, clientY);
+      clientY += 15;
+    }
+
+    clientY += 15;
+    doc.text(`A/A: ${budget.client.address || ""}`, clientX, clientY);
+  } else if (budget.clientName) {
+    doc
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text(budget.clientName, clientX, clientY);
+  }
+
+  // --- Services Table ---
+  const tableTop = 300;
+  const posQty = 50;
+  const posDesc = 110;
+  const posPrice = 380;
+  const posTotal = 480;
+  const colWidth = 70;
+
+  doc.font("Helvetica-Bold").fontSize(9);
+  currentY = tableTop;
+
+  // Draw Header Line
+  doc
+    .moveTo(50, currentY + 15)
+    .lineTo(550, currentY + 15)
+    .stroke();
+
+  doc.text("Cant.", posQty, currentY);
+  doc.text("Nº Descripción", posDesc, currentY);
+  doc.text("Precio", posPrice, currentY, { width: colWidth, align: "right" });
+  doc.text("Importe línea", posTotal, currentY - 10, {
+    width: colWidth + 5,
+    align: "right",
+  });
+  doc.text("excl. IVA", posTotal, currentY, {
+    width: colWidth + 5,
+    align: "right",
+  });
+
+  currentY += 25;
+  doc.font("Helvetica").fontSize(9);
+
+  if (budget.services && budget.services.length > 0) {
+    budget.services.forEach((service) => {
+      const qty = service.quantity || 1;
+      const price = service.taxBase;
+      const discountPercent = service.discount || 0;
+      const taxableAmount = price * qty * (1 - discountPercent / 100);
+
+      doc.text(qty.toString(), posQty, currentY);
+      doc.text(service.concept, posDesc, currentY, { width: 250 });
+      doc.text(formatCurrency(price), posPrice, currentY, {
+        width: colWidth,
+        align: "right",
+      });
+      doc.text(formatCurrency(taxableAmount), posTotal, currentY, {
+        width: colWidth + 5,
+        align: "right",
+      });
+
+      const textHeight = doc.heightOfString(service.concept, { width: 250 });
+      currentY += Math.max(textHeight, 15) + 5;
+    });
+  }
+
+  // --- IVA Info ---
+  currentY += 20;
+  doc
+    .fontSize(8)
+    .text("IVA NO INCLUIDO", 0, currentY, { align: "center", width: 595 });
+
+  // --- Bottom Details ---
+  currentY += 40;
+  const detailsX1 = 50;
+  const detailsX2 = 200;
+
+  const addBottomDetail = (label, value) => {
+    doc.font("Helvetica").text(label, detailsX1, currentY);
+    doc.font("Helvetica").text(value, detailsX2, currentY);
+    currentY += 15;
+  };
+
+  doc.fontSize(10);
+  addBottomDetail(
+    "Comercial",
+    (budget.userId &&
+      budget.userId.name + " " + (budget.userId.lastName || "")) ||
+      "VerSalIT"
+  );
+  addBottomDetail("Plazo de entrega", "a confirmar");
+  addBottomDetail("Términos pago", "Contado");
+  addBottomDetail("Condiciones envío", "Portes Pagados");
+
+  const validUntil = new Date(budget.date);
+  validUntil.setMonth(validUntil.getMonth() + 1);
+  addBottomDetail("Válido hasta", formatDate(validUntil));
+
+  // --- Footer ---
+  const pageHeight = doc.page.height;
+  const bottomMargin = 50;
+
+  // Legal text (GDPR)
+  doc.fontSize(6).font("Helvetica").fillColor("grey");
+  doc.text(
+    "Responsable del tratamiento: VerSalIT SL CIF: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.",
+    50,
+    pageHeight - 160,
+    { width: 500, align: "justify" }
+  );
+
+  // Bank Info Footer
+  const bankInfoY = pageHeight - bottomMargin - 45;
+  doc.fontSize(8).fillColor("black");
+
+  doc.font("Helvetica-Bold").text("VerSal-IT", 50, bankInfoY);
+  doc.font("Helvetica").fontSize(7);
+  doc.text("Avenida Barcelona", 50, bankInfoY + 10);
+  doc.text("14010 Córdoba", 50, bankInfoY + 18);
+  doc.text("info@versal-it.es", 50, bankInfoY + 26);
+
+  doc.font("Helvetica-Bold").text("NIF: B00000000", 250, bankInfoY);
+  doc.font("Helvetica").fontSize(7);
+  doc.text("Tomo: 00000, Libro: 0, Folio: 0", 250, bankInfoY + 10);
+  doc.text("Sección: 8 Hoja: X 000", 250, bankInfoY + 18);
+  doc.text("Inscripción 1", 250, bankInfoY + 26);
+
+  doc.font("Helvetica-Bold").text("Banco: BBVA", 430, bankInfoY);
+  doc.font("Helvetica").fontSize(7);
+  doc.text("IBAN: ES0000000000000000000000", 430, bankInfoY + 10);
+  doc.text("SWIFT: BBVAESMM", 430, bankInfoY + 18);
+
+  doc.end();
+};
+
+module.exports = { buildPDF, buildBudgetPDF, sendPDFInvoiceByEmail };

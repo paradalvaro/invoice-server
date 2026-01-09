@@ -46,6 +46,10 @@ const ClientSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    province: {
+      type: String,
+      trim: true,
+    },
     country: {
       type: String,
       trim: true,

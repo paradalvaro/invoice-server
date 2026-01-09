@@ -170,16 +170,25 @@ const markAsPaid = async (req, res) => {
   }
 };
 
+const getModelo347 = async (req, res) => {
+  try {
+    const { year } = req.query; // Assuming year is passed as a query parameter
+    const data = await invoiceService.getModelo347Data(req.user.id, year);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   getInvoices,
   createInvoice,
   getInvoice,
   updateInvoice,
   deleteInvoice,
+  getModelo347,
   generatePdf,
-  getNextNumber,
-  generatePdf,
-  getNextNumber,
+  getNextInvoiceNumber: getNextNumber,
   sendInvoiceByEmail,
   markAsPaid,
 };

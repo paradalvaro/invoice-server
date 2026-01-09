@@ -310,6 +310,7 @@ module.exports = {
   getInvoiceBySerieAndNumber,
   getInvoicePreviousHash,
   markAsPaid,
+  getModelo347Data,
 };
 
 async function markAsPaid(id, userId, userType) {
@@ -326,4 +327,90 @@ async function markAsPaid(id, userId, userType) {
     throw new Error("Invoice not found");
   }
   return invoice;
+}
+
+async function getModelo347Data(year, userType) {
+  const startOfYear = new Date(year, 0, 1);
+  const endOfYear = new Date(year, 11, 31, 23, 59, 59);
+
+  const matchStage = {
+    date: { $gte: startOfYear, $lte: endOfYear },
+    status: { $ne: "Draft" },
+    type: { $ne: "F2" },
+    client: { $exists: true, $ne: null },
+  };
+
+  const aggregation = await Invoice.aggregate([
+    { $match: matchStage },
+    {
+      $project: {
+        client: 1,
+        totalAmount: 1,
+        date: 1,
+        quarter: {
+          $ceil: { $divide: [{ $month: "$date" }, 3] },
+        },
+      },
+    },
+    {
+      $group: {
+        _id: "$client",
+        totalAmount: { $sum: "$totalAmount" },
+        q1: {
+          $sum: {
+            $cond: [{ $eq: ["$quarter", 1] }, "$totalAmount", 0],
+          },
+        },
+        q2: {
+          $sum: {
+            $cond: [{ $eq: ["$quarter", 2] }, "$totalAmount", 0],
+          },
+        },
+        q3: {
+          $sum: {
+            $cond: [{ $eq: ["$quarter", 3] }, "$totalAmount", 0],
+          },
+        },
+        q4: {
+          $sum: {
+            $cond: [{ $eq: ["$quarter", 4] }, "$totalAmount", 0],
+          },
+        },
+      },
+    },
+    {
+      $match: {
+        totalAmount: { $gt: 3005.06 },
+      },
+    },
+    {
+      $lookup: {
+        from: "clients",
+        localField: "_id",
+        foreignField: "_id",
+        as: "clientDetails",
+      },
+    },
+    {
+      $unwind: "$clientDetails",
+    },
+    {
+      $project: {
+        _id: 1,
+        totalAmount: 1,
+        q1: 1,
+        q2: 1,
+        q3: 1,
+        q4: 1,
+        clientName: "$clientDetails.name",
+        clientNIF: "$clientDetails.nif",
+        clientAddress: "$clientDetails.address",
+        clientCity: "$clientDetails.city",
+        clientProvince: "$clientDetails.province",
+        clientPostalCode: "$clientDetails.postalCode",
+      },
+    },
+  ]);
+
+  return aggregation;
 }

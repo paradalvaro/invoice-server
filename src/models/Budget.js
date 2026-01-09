@@ -1,19 +1,38 @@
 const mongoose = require("mongoose");
 
+const getStatus = (ctx) => {
+  if (ctx instanceof mongoose.Query) {
+    const update = ctx.getUpdate();
+    return update.status || (update.$set && update.$set.status);
+  }
+  return ctx.status;
+};
+
 const BudgetSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
   },
+  serie: {
+    type: String,
+    enum: ["P2025", "P2026"],
+    required: function () {
+      return getStatus(this) !== "Draft";
+    },
+  },
   budgetNumber: {
     type: Number,
-    required: true,
+    required: function () {
+      return getStatus(this) !== "Draft";
+    },
   },
   client: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Client",
-    required: false,
+    required: function () {
+      return getStatus(this) !== "Draft";
+    },
   },
   services: {
     type: [
@@ -25,22 +44,30 @@ const BudgetSchema = new mongoose.Schema({
         iva: { type: Number, required: true, default: 21 },
       },
     ],
-    required: true,
     validate: {
       validator: function (v) {
+        if (getStatus(this) === "Draft") return true;
         return Array.isArray(v) && v.length > 0;
       },
-      message: "Debes agregar al menos un servicio a la factura.",
+      message: "Debes agregar al menos un servicio.",
     },
   },
   totalAmount: {
     type: Number,
-    required: true,
+    required: function () {
+      return getStatus(this) !== "Draft";
+    },
   },
   status: {
     type: String,
     enum: ["Draft", "Done"],
     default: "Draft",
+  },
+  dueDate: {
+    type: Date,
+    required: function () {
+      return getStatus(this) !== "Draft";
+    },
   },
   date: {
     type: Date,

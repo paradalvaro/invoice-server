@@ -9,8 +9,9 @@ router.use(authMiddleware);
 router.get("/", budgetController.getBudgets);
 router.get("/next-number", budgetController.getNextNumber);
 router.post("/", budgetController.createBudget);
+router.get("/:id/pdf", budgetController.generatePdf);
 router.get("/:id", budgetController.getBudget);
-router.put("/:id", roleMiddleware, budgetController.updateBudget);
-router.delete("/:id", roleMiddleware, budgetController.deleteBudget);
+router.put("/:id", budgetController.updateBudget);
+router.delete("/:id", budgetController.deleteBudget);
 
 module.exports = router;

@@ -399,50 +399,30 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
 
   doc.moveDown(4);
 
-  // Title
+  // Title & Page
   doc.fontSize(16).font("Helvetica-Bold").text("Oferta venta", 50, 150);
-
-  // Invoice Details (Left side)
-  const leftX = 50;
-  let currentY = 175;
-  const col1Width = 150;
-
-  doc.fontSize(10).font("Helvetica");
-  doc.text("Fecha emisión documento", leftX, currentY);
-  doc
-    .font("Helvetica-Bold")
-    .text(formatDate(budget.date), leftX + col1Width, currentY);
-  currentY += 15;
-
-  doc.font("Helvetica").text("Nº", leftX, currentY);
-  doc
-    .font("Helvetica-Bold")
-    .text(
-      `${budget.serie || ""}${budget.budgetNumber || ""}`,
-      leftX + col1Width,
-      currentY
-    );
-  currentY += 15;
-
-  doc.font("Helvetica").text("Pág.", leftX, currentY);
-  doc.font("Helvetica-Bold").text("1", leftX + col1Width, currentY);
+  doc.fontSize(10).font("Helvetica").text("Página 1 de 1", 50, 170);
 
   // Client Info Box (Right side)
   const clientX = 350;
   let clientY = 150;
 
   if (budget.client && typeof budget.client === "object") {
+    // Client Name
     doc
-      .fontSize(12)
-      .font("Helvetica-Bold")
+      .fontSize(14)
+      .font("Helvetica") // Match invoice font weight for consistency
       .text(budget.client.name, clientX, clientY);
     clientY += 20;
 
     doc.fontSize(10).font("Helvetica");
-    // Line 2: (Picture shows "Parcela 56" which is not in our model usually, so we skip or if address has multiple lines)
-    // Actually the user said: "the 'A/A' is only the field address. the rest of the fields related to the address are showed before like its in the picture"
-    // So the previous lines are CP City, Province, Country.
 
+    // Address
+    if (budget.client.address) {
+      doc.text(budget.client.address, clientX, clientY);
+      clientY += 15;
+    }
+    // CP / City
     if (budget.client.postalCode || budget.client.city) {
       doc.text(
         `${budget.client.postalCode || ""} ${budget.client.city || ""}`.trim(),
@@ -451,30 +431,86 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
       );
       clientY += 15;
     }
+    // Province
     if (budget.client.province) {
       doc.text(budget.client.province, clientX, clientY);
       clientY += 15;
     }
+    // Country
     if (budget.client.country) {
       doc.text(budget.client.country, clientX, clientY);
       clientY += 15;
     }
 
     clientY += 15;
-    doc.text(`A/A: ${budget.client.address || ""}`, clientX, clientY);
+    // A/A: Creator Name
+    const creatorName =
+      (budget.userId &&
+        `${budget.userId.name} ${budget.userId.lastName || ""}`) ||
+      "VerSalIT";
+    doc.text(`A/A: ${creatorName.trim()}`, clientX, clientY);
+    clientY += 20;
   } else if (budget.clientName) {
     doc
-      .fontSize(12)
-      .font("Helvetica-Bold")
+      .fontSize(14)
+      .font("Helvetica")
       .text(budget.clientName, clientX, clientY);
   }
 
+  // --- Budget Details (Left side) ---
+  const leftX = 50;
+  let currentY = 200;
+  const col1Width = 150;
+
+  const addDetailRow = (label, value) => {
+    doc.fillColor("black").font("Helvetica").text(label, leftX, currentY);
+    doc.font("Helvetica-Bold").text(value, leftX + col1Width, currentY);
+    currentY += 15;
+  };
+
+  doc.fontSize(10);
+  addDetailRow("Fecha emisión documento", formatDate(budget.date));
+  addDetailRow("Nº", `${budget.serie || ""}${budget.budgetNumber || ""}`);
+
+  const creatorName =
+    (budget.userId &&
+      `${budget.userId.name} ${budget.userId.lastName || ""}`) ||
+    "VerSalIT";
+  addDetailRow("Comercial", creatorName.trim());
+  addDetailRow("Plazo de entrega", "a confirmar");
+
+  const paymentTermsText =
+    budget.paymentTerms === "Manual"
+      ? budget.paymentTermsManual
+      : budget.paymentTerms === "1 day"
+      ? "1 día"
+      : budget.paymentTerms === "7 days"
+      ? "7 días"
+      : budget.paymentTerms === "15 days"
+      ? "15 días"
+      : budget.paymentTerms === "30 days"
+      ? "30 días"
+      : budget.paymentTerms === "45 days"
+      ? "45 días"
+      : budget.paymentTerms === "60 days"
+      ? "60 días"
+      : budget.paymentTerms || "1 día";
+
+  addDetailRow("Términos pago", paymentTermsText);
+  addDetailRow("Condiciones envío", "Portes Pagados");
+
+  const validUntil = new Date(budget.date);
+  validUntil.setMonth(validUntil.getMonth() + 1);
+  addDetailRow("Válido hasta", formatDate(validUntil));
+
   // --- Services Table ---
-  const tableTop = 300;
+  const tableTop = 350;
   const posQty = 50;
-  const posDesc = 110;
-  const posPrice = 380;
-  const posTotal = 480;
+  const posNo = 95;
+  const posDesc = 130;
+  const posPrice = 330;
+  const posDisc = 405;
+  const posTotal = 475;
   const colWidth = 70;
 
   doc.font("Helvetica-Bold").fontSize(9);
@@ -482,35 +518,62 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
 
   // Draw Header Line
   doc
-    .moveTo(50, currentY + 15)
-    .lineTo(550, currentY + 15)
+    .moveTo(50, currentY + 22)
+    .lineTo(550, currentY + 22)
     .stroke();
 
-  doc.text("Cant.", posQty, currentY);
-  doc.text("Nº Descripción", posDesc, currentY);
+  doc.text("Cantidad", posQty, currentY);
+  doc.text("Nº", posNo, currentY);
+  doc.text("Descripción", posDesc, currentY);
+
   doc.text("Precio", posPrice, currentY, { width: colWidth, align: "right" });
-  doc.text("Importe línea", posTotal, currentY - 10, {
-    width: colWidth + 5,
+  doc.text("venta", posPrice, currentY + 10, {
+    width: colWidth,
     align: "right",
   });
-  doc.text("excl. IVA", posTotal, currentY, {
+
+  doc.text("%", posDisc, currentY, { width: colWidth, align: "right" });
+  doc.text("Descuento", posDisc, currentY + 10, {
+    width: colWidth,
+    align: "right",
+  });
+
+  doc.text("Importe", posTotal, currentY + 10, {
     width: colWidth + 5,
     align: "right",
   });
 
-  currentY += 25;
+  currentY += 30;
   doc.font("Helvetica").fontSize(9);
 
+  let totalImporteExcl = 0;
+  let totalIvaAmount = 0;
+
   if (budget.services && budget.services.length > 0) {
-    budget.services.forEach((service) => {
+    budget.services.forEach((service, index) => {
       const qty = service.quantity || 1;
       const price = service.taxBase;
       const discountPercent = service.discount || 0;
-      const taxableAmount = price * qty * (1 - discountPercent / 100);
+
+      const subtotal = price * qty;
+      const discountAmount = subtotal * (discountPercent / 100);
+      const taxableAmount = subtotal - discountAmount;
+
+      const ivaPercent = service.iva || 21;
+      const ivaAmount = taxableAmount * (ivaPercent / 100);
+
+      totalImporteExcl += taxableAmount;
+      totalIvaAmount += ivaAmount;
 
       doc.text(qty.toString(), posQty, currentY);
-      doc.text(service.concept, posDesc, currentY, { width: 250 });
+      doc.text((index + 1).toString(), posNo, currentY);
+      doc.text(service.concept, posDesc, currentY, { width: 190 });
+
       doc.text(formatCurrency(price), posPrice, currentY, {
+        width: colWidth,
+        align: "right",
+      });
+      doc.text(formatCurrency(discountPercent), posDisc, currentY, {
         width: colWidth,
         align: "right",
       });
@@ -519,42 +582,50 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
         align: "right",
       });
 
-      const textHeight = doc.heightOfString(service.concept, { width: 250 });
+      const textHeight = doc.heightOfString(service.concept, { width: 190 });
       currentY += Math.max(textHeight, 15) + 5;
     });
   }
 
-  // --- IVA Info ---
+  // --- Totals Section ---
   currentY += 20;
-  doc
-    .fontSize(8)
-    .text("IVA NO INCLUIDO", 0, currentY, { align: "center", width: 595 });
+  const labelWidth = 160;
+  const valueWidth = 80;
+  const labelsX = 300;
+  const valuesX = 470;
 
-  // --- Bottom Details ---
-  currentY += 40;
-  const detailsX1 = 50;
-  const detailsX2 = 200;
+  doc.font("Helvetica-Bold");
 
-  const addBottomDetail = (label, value) => {
-    doc.font("Helvetica").text(label, detailsX1, currentY);
-    doc.font("Helvetica").text(value, detailsX2, currentY);
-    currentY += 15;
-  };
+  doc.text("Total EUR IVA excl.", labelsX, currentY, {
+    width: labelWidth,
+    align: "right",
+  });
+  doc.text(formatCurrency(totalImporteExcl), valuesX, currentY, {
+    width: valueWidth,
+    align: "right",
+  });
 
-  doc.fontSize(10);
-  addBottomDetail(
-    "Comercial",
-    (budget.userId &&
-      budget.userId.name + " " + (budget.userId.lastName || "")) ||
-      "VerSalIT"
-  );
-  addBottomDetail("Plazo de entrega", "a confirmar");
-  addBottomDetail("Términos pago", "Contado");
-  addBottomDetail("Condiciones envío", "Portes Pagados");
+  currentY += 15;
+  doc.font("Helvetica");
+  doc.text("Importe IVA", labelsX, currentY, {
+    width: labelWidth,
+    align: "right",
+  });
+  doc.text(formatCurrency(totalIvaAmount), valuesX, currentY, {
+    width: valueWidth,
+    align: "right",
+  });
 
-  const validUntil = new Date(budget.date);
-  validUntil.setMonth(validUntil.getMonth() + 1);
-  addBottomDetail("Válido hasta", formatDate(validUntil));
+  currentY += 20;
+  doc.font("Helvetica-Bold");
+  doc.text("Total EUR IVA incl.", labelsX, currentY, {
+    width: labelWidth,
+    align: "right",
+  });
+  doc.text(formatCurrency(budget.totalAmount), valuesX, currentY, {
+    width: valueWidth,
+    align: "right",
+  });
 
   // --- Footer ---
   const pageHeight = doc.page.height;
@@ -577,13 +648,13 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
   doc.font("Helvetica").fontSize(7);
   doc.text("Avenida Barcelona", 50, bankInfoY + 10);
   doc.text("14010 Córdoba", 50, bankInfoY + 18);
-  doc.text("info@versal-it.es", 50, bankInfoY + 26);
+  doc.text("info@versal-it.es | https://versal-it.com/", 50, bankInfoY + 26);
 
   doc.font("Helvetica-Bold").text("NIF: B00000000", 250, bankInfoY);
   doc.font("Helvetica").fontSize(7);
   doc.text("Tomo: 00000, Libro: 0, Folio: 0", 250, bankInfoY + 10);
-  doc.text("Sección: 8 Hoja: X 000", 250, bankInfoY + 18);
-  doc.text("Inscripción 1", 250, bankInfoY + 26);
+  doc.text("Sección: 0 Hoja: X 000000", 250, bankInfoY + 18);
+  doc.text("Inscripción 0", 250, bankInfoY + 26);
 
   doc.font("Helvetica-Bold").text("Banco: BBVA", 430, bankInfoY);
   doc.font("Helvetica").fontSize(7);

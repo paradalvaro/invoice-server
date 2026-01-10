@@ -58,6 +58,25 @@ const BudgetSchema = new mongoose.Schema({
       return getStatus(this) !== "Draft";
     },
   },
+  paymentTerms: {
+    type: String,
+    enum: [
+      "1 day",
+      "7 days",
+      "15 days",
+      "30 days",
+      "45 days",
+      "60 days",
+      "Manual",
+    ],
+    default: "1 day",
+  },
+  paymentTermsManual: {
+    type: String,
+    required: function () {
+      return getStatus(this) !== "Draft" && this.paymentTerms === "Manual";
+    },
+  },
   status: {
     type: String,
     enum: ["Draft", "Done"],

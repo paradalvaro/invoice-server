@@ -7,6 +7,7 @@ router.use(authMiddleware);
 
 router.post("/", clientController.createClient);
 router.get("/", clientController.getClients);
+router.get("/next-number", clientController.getNextClientNumber);
 router.get("/:id", clientController.getClient);
 router.put("/:id", clientController.updateClient);
 router.delete("/:id", clientController.deleteClient);

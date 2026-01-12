@@ -1,7 +1,15 @@
 const Client = require("../models/Client");
 
 const createClient = async (clientData) => {
-  const client = new Client(clientData);
+  // Get the last client number
+  const lastClient = await Client.findOne().sort({ clientNumber: -1 });
+  const nextNumber =
+    lastClient && lastClient.clientNumber ? lastClient.clientNumber + 1 : 1;
+
+  const client = new Client({
+    ...clientData,
+    clientNumber: nextNumber,
+  });
   return await client.save();
 };
 
@@ -53,10 +61,18 @@ const deleteClient = async (id) => {
   return client;
 };
 
+const getNextClientNumber = async () => {
+  const lastClient = await Client.findOne().sort({ clientNumber: -1 });
+  return lastClient && lastClient.clientNumber
+    ? lastClient.clientNumber + 1
+    : 1;
+};
+
 module.exports = {
   createClient,
   getClients,
   getClientById,
   updateClient,
   deleteClient,
+  getNextClientNumber,
 };

@@ -7,6 +7,10 @@ const ClientSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    clientNumber: {
+      type: Number,
+      unique: true,
+    },
     name: {
       type: String,
       required: true,
@@ -62,6 +66,10 @@ const ClientSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
+    },
+    paymentMethod: {
+      type: String,
+      default: "Transferencia",
     },
   },
   {

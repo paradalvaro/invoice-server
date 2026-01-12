@@ -5,6 +5,7 @@ const pdfService = require("../services/pdfService");
 const { agregarFacturaACola } = require("../queues/invoiceQueue");
 
 const utils = require("../utils/utils");
+const Settings = require("../models/Settings");
 
 const getInvoices = async (req, res) => {
   try {
@@ -112,10 +113,14 @@ const generatePdf = async (req, res) => {
       "Content-Disposition": `attachment;filename=invoice-${invoice.serie}${invoice.invoiceNumber}.pdf`,
     });
 
+    const settings = await Settings.findOne();
+    const timezone = settings ? settings.timezone : "Europe/Madrid";
+
     pdfService.buildPDF(
       invoice,
       (chunk) => stream.write(chunk),
-      () => stream.end()
+      () => stream.end(),
+      timezone
     );
   } catch (err) {
     res.status(404).json({ message: err.message });
@@ -131,6 +136,9 @@ const sendInvoiceByEmail = async (req, res) => {
     );
     const { emails } = req.body;
     let buffers = [];
+
+    const settings = await Settings.findOne();
+    const timezone = settings ? settings.timezone : "Europe/Madrid";
 
     pdfService.buildPDF(invoice, buffers.push.bind(buffers), async () => {
       try {

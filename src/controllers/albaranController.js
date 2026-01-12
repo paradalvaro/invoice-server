@@ -1,8 +1,8 @@
-const budgetService = require("../services/budgetService");
+const albaranService = require("../services/albaranService");
 const pdfService = require("../services/pdfService");
 const Settings = require("../models/Settings");
 
-const getBudgets = async (req, res) => {
+const getAlbaranes = async (req, res) => {
   try {
     const {
       page = 1,
@@ -13,7 +13,7 @@ const getBudgets = async (req, res) => {
       searchField,
       status,
     } = req.query;
-    const result = await budgetService.getAllBudgets(
+    const result = await albaranService.getAllAlbaranes(
       req.user.id,
       req.user.type,
       page,
@@ -30,47 +30,51 @@ const getBudgets = async (req, res) => {
   }
 };
 
-const createBudget = async (req, res) => {
+const createAlbaran = async (req, res) => {
   try {
-    const budgetData = { ...req.body, userId: req.user.id };
-    const budget = await budgetService.createBudget(budgetData);
-    res.status(201).json(budget);
+    const albaranData = { ...req.body, userId: req.user.id };
+    const albaran = await albaranService.createAlbaran(albaranData);
+    res.status(201).json(albaran);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
 };
 
-const getBudget = async (req, res) => {
+const getAlbaran = async (req, res) => {
   try {
-    const budget = await budgetService.getBudgetById(
+    const albaran = await albaranService.getAlbaranById(
       req.params.id,
       req.user.id,
       req.user.type
     );
-    res.json(budget);
+    res.json(albaran);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
 };
 
-const updateBudget = async (req, res) => {
+const updateAlbaran = async (req, res) => {
   try {
-    const budget = await budgetService.updateBudget(
+    const albaran = await albaranService.updateAlbaran(
       req.params.id,
       req.user.id,
       req.user.type,
       req.body
     );
-    res.json(budget);
+    res.json(albaran);
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
 };
 
-const deleteBudget = async (req, res) => {
+const deleteAlbaran = async (req, res) => {
   try {
-    await budgetService.deleteBudget(req.params.id, req.user.id, req.user.type);
-    res.json({ message: "Budget removed" });
+    await albaranService.deleteAlbaran(
+      req.params.id,
+      req.user.id,
+      req.user.type
+    );
+    res.json({ message: "Albaran removed" });
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
@@ -79,7 +83,7 @@ const deleteBudget = async (req, res) => {
 const getNextNumber = async (req, res) => {
   try {
     const { serie } = req.query;
-    const nextNumber = await budgetService.getNextBudgetNumber(serie);
+    const nextNumber = await albaranService.getNextAlbaranNumber(serie);
     res.json({ nextNumber });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -88,7 +92,7 @@ const getNextNumber = async (req, res) => {
 
 const generatePdf = async (req, res) => {
   try {
-    const budget = await budgetService.getBudgetById(
+    const albaran = await albaranService.getAlbaranById(
       req.params.id,
       req.user.id,
       req.user.type
@@ -96,16 +100,16 @@ const generatePdf = async (req, res) => {
 
     const stream = res.writeHead(200, {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment;filename=budget-${budget.serie || ""}${
-        budget.budgetNumber || ""
-      }.pdf`,
+      "Content-Disposition": `attachment;filename=albaran-${
+        albaran.serie || ""
+      }${albaran.AlbaranNumber || ""}.pdf`,
     });
 
     const settings = await Settings.findOne();
     const timezone = settings ? settings.timezone : "Europe/Madrid";
 
-    pdfService.buildBudgetPDF(
-      budget,
+    pdfService.buildAlbaranPDF(
+      albaran,
       (chunk) => stream.write(chunk),
       () => stream.end(),
       timezone
@@ -116,11 +120,11 @@ const generatePdf = async (req, res) => {
 };
 
 module.exports = {
-  getBudgets,
-  createBudget,
-  getBudget,
-  updateBudget,
-  deleteBudget,
+  getAlbaranes,
+  createAlbaran,
+  getAlbaran,
+  updateAlbaran,
+  deleteAlbaran,
   getNextNumber,
   generatePdf,
 };

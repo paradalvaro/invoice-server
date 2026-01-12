@@ -16,16 +16,22 @@ const formatCurrency = (amount) => {
 };
 
 // Helper to format date
-const formatDate = (date) => {
+const formatDate = (date, timezone = "Europe/Madrid") => {
   if (!date) return "";
   return new Date(date).toLocaleDateString("es-ES", {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: timezone,
   });
 };
 
-const buildPDF = async (invoice, dataCallback, endCallback) => {
+const buildPDF = async (
+  invoice,
+  dataCallback,
+  endCallback,
+  timezone = "Europe/Madrid"
+) => {
   const doc = new PDFDocument({ margin: 50, size: "A4" });
 
   doc.on("data", dataCallback);
@@ -131,7 +137,12 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   doc.fontSize(10);
 
   // Factura-a Nº cliente: 0000 (Placeholder or client ID)
-  addDetailRow("Factura-a Nº cliente", "0000"); // Don't have client ID in Invoice model directly easily visible without populate. Using 0000 as placeholder like image.
+  addDetailRow(
+    "Factura-a Nº cliente",
+    invoice.client?.clientNumber
+      ? invoice.client.clientNumber.toString().padStart(5, "0")
+      : "00000"
+  );
 
   // Nº factura: invoice.serie + invoice.invoiceNumber
   addDetailRow("Nº factura", `${invoice.serie}${invoice.invoiceNumber}`);
@@ -139,14 +150,14 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   // Nº pedido: XX0000000 (Placeholder or order number)
   addDetailRow("Nº pedido", "XX0000000");
 
-  // Nº de documento externo: 000000
-  addDetailRow("Nº de documento externo", "000000");
+  // Nº de documento externo: invoice.externalDocumentNumber
+  addDetailRow("Nº de documento externo", invoice.externalDocumentNumber || "");
 
   // Fecha registro: invoice.date
-  addDetailRow("Fecha registro", formatDate(invoice.date));
+  addDetailRow("Fecha registro", formatDate(invoice.date, timezone));
 
   // Fecha vencimiento: invoice.dueDate
-  addDetailRow("Fecha vencimiento", formatDate(invoice.dueDate));
+  addDetailRow("Fecha vencimiento", formatDate(invoice.dueDate, timezone));
 
   // Términos de pago: (dueDate - date) in days
   let paymentTerms = "0 días";
@@ -159,17 +170,13 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   }
   addDetailRow("Términos de pago", paymentTerms);
 
-  // Forma pago: "Transferencia"
-  addDetailRow("Forma pago", "Transferencia");
+  // Forma pago: Use client payment method or fallback to "Transferencia"
+  addDetailRow("Forma pago", invoice.client?.paymentMethod || "Transferencia");
 
   // --- Services Table ---
-  const tableTop = 350; // Adjust as needed
-  const itemCodeX = 50; // Cantidad? No, Header says "Cantidad"
-  // Picture headers: Cantidad | Nº | Descripción | Precio venta | % Descuento | Importe
-
-  // Columns positions
+  currentY = Math.max(currentY + 20, 320); // Relative to details, at least 320
   const posQty = 50;
-  const posNo = 95; // "Nº" column
+  const posNo = 95;
   const posDesc = 130;
   const posPrice = 330;
   const posDisc = 405;
@@ -177,7 +184,6 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   const colWidth = 70;
 
   doc.font("Helvetica-Bold").fontSize(9);
-  currentY = tableTop;
 
   // Draw Header Line
   doc
@@ -217,12 +223,12 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
   if (invoice.services && invoice.services.length > 0) {
     invoice.services.forEach((service, index) => {
       const qty = service.quantity || 1;
-      const price = service.taxBase; // "Precio venta"
+      const price = service.taxBase;
       const discountPercent = service.discount || 0;
 
       const subtotal = price * qty;
       const discountAmount = subtotal * (discountPercent / 100);
-      const taxableAmount = subtotal - discountAmount; // This is "Importe"
+      const taxableAmount = subtotal - discountAmount;
 
       const ivaPercent = service.iva || 21;
       const ivaAmount = taxableAmount * (ivaPercent / 100);
@@ -231,7 +237,7 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
       totalIvaAmount += ivaAmount;
 
       doc.text(qty.toString(), posQty, currentY);
-      doc.text((index + 1).toString(), posNo, currentY);
+      doc.text((service.number || index + 1).toString(), posNo, currentY);
 
       doc.text(service.concept, posDesc, currentY, { width: 190 });
 
@@ -248,7 +254,8 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
         align: "right",
       });
 
-      currentY += 20; // Next row
+      const textHeight = doc.heightOfString(service.concept, { width: 190 });
+      currentY += Math.max(textHeight, 15) + 5;
     });
   }
 
@@ -303,7 +310,7 @@ const buildPDF = async (invoice, dataCallback, endCallback) => {
     invoice.legalText ||
       "Responsable del tratamiento: VerSal-IT: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). Puede consultar los plazos de conservación en nuestra política de privacidad en info@versal-it.es / https://versal-it.com/ | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es / https://versal-it.com/ o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”. Si considera que sus derechos han sido vulnerados, puede interponer una reclamación ante la AEPD.",
     50,
-    currentY + 20,
+    currentY + 50,
     { width: 500, align: "justify" }
   );
 
@@ -380,7 +387,12 @@ const sendPDFInvoiceByEmail = async (pdfBuffer, invoice, emails) => {
     throw error;
   }
 };
-const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
+const buildBudgetPDF = async (
+  budget,
+  dataCallback,
+  endCallback,
+  timezone = "Europe/Madrid"
+) => {
   const doc = new PDFDocument({ margin: 50, size: "A4" });
 
   doc.on("data", dataCallback);
@@ -469,7 +481,7 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
   };
 
   doc.fontSize(10);
-  addDetailRow("Fecha emisión documento", formatDate(budget.date));
+  addDetailRow("Fecha emisión documento", formatDate(budget.date, timezone));
   addDetailRow("Nº", `${budget.serie || ""}${budget.budgetNumber || ""}`);
 
   const creatorName =
@@ -501,10 +513,11 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
 
   const validUntil = new Date(budget.date);
   validUntil.setMonth(validUntil.getMonth() + 1);
-  addDetailRow("Válido hasta", formatDate(validUntil));
+  addDetailRow("Válido hasta", formatDate(validUntil, timezone));
 
   // --- Services Table ---
-  const tableTop = 350;
+  currentY = Math.max(currentY + 20, 320); // Relative to details, at least 320
+  const tableTop = currentY;
   const posQty = 50;
   const posNo = 95;
   const posDesc = 130;
@@ -514,7 +527,6 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
   const colWidth = 70;
 
   doc.font("Helvetica-Bold").fontSize(9);
-  currentY = tableTop;
 
   // Draw Header Line
   doc
@@ -566,7 +578,7 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
       totalIvaAmount += ivaAmount;
 
       doc.text(qty.toString(), posQty, currentY);
-      doc.text((index + 1).toString(), posNo, currentY);
+      doc.text((service.number || index + 1).toString(), posNo, currentY);
       doc.text(service.concept, posDesc, currentY, { width: 190 });
 
       doc.text(formatCurrency(price), posPrice, currentY, {
@@ -634,9 +646,9 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
   // Legal text (GDPR)
   doc.fontSize(6).font("Helvetica").fillColor("grey");
   doc.text(
-    "Responsable del tratamiento: VerSalIT SL CIF: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.",
+    "Responsable del tratamiento: VerSalIT SL CIF: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica in la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.",
     50,
-    pageHeight - 160,
+    currentY + 50,
     { width: 500, align: "justify" }
   );
 
@@ -664,4 +676,185 @@ const buildBudgetPDF = async (budget, dataCallback, endCallback) => {
   doc.end();
 };
 
-module.exports = { buildPDF, buildBudgetPDF, sendPDFInvoiceByEmail };
+const buildAlbaranPDF = async (
+  albaran,
+  dataCallback,
+  endCallback,
+  timezone = "Europe/Madrid"
+) => {
+  const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+  doc.on("data", dataCallback);
+  doc.on("end", endCallback);
+
+  // --- Header Section ---
+  const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
+
+  try {
+    doc.image(logoPath, 50, 45, { width: 150 });
+  } catch (err) {
+    console.warn("Logo not found at:", logoPath);
+    doc.fontSize(20).text("VerSalIT", 50, 45);
+  }
+
+  // Client Info Box (Right side)
+  const clientX = 350;
+  let clientY = 110;
+  doc
+    .fontSize(12)
+    .font("Helvetica-Bold")
+    .text(albaran.client?.name || "CLIENT NAME", clientX, clientY);
+
+  clientY += 15;
+  doc.fontSize(10).font("Helvetica");
+
+  if (albaran.client && typeof albaran.client === "object") {
+    const { address, postalCode, city, province, country, phone } =
+      albaran.client;
+    if (phone) {
+      doc.text(`(${phone})`, clientX, clientY);
+      clientY += 15;
+    }
+    if (address) {
+      doc.text(address, clientX, clientY);
+      const lines = address.split("\n").length;
+      clientY += 15 * lines;
+    }
+    if (postalCode || city) {
+      doc.text(`${postalCode || ""} ${city || ""}`.trim(), clientX, clientY);
+      clientY += 15;
+    }
+    if (province) {
+      doc.text(province, clientX, clientY);
+      clientY += 15;
+    }
+    if (country) {
+      doc.text(country, clientX, clientY);
+      clientY += 15;
+    }
+  }
+
+  // Title
+  doc.fontSize(14).font("Helvetica-Bold").text("Venta - Alb. venta", 50, 150);
+  doc.fontSize(10).font("Helvetica").text("Página 1 de 1", 50, 165);
+
+  // --- Albaran Details (Left side) ---
+  const leftX = 50;
+  let currentY = 200;
+  const col1Width = 150;
+
+  const addDetailRow = (label, value) => {
+    doc.fillColor("black").font("Helvetica").text(label, leftX, currentY);
+    doc.font("Helvetica-Bold").text(value || "", leftX + col1Width, currentY);
+    currentY += 15;
+  };
+
+  doc.fontSize(10);
+  addDetailRow("Fecha emisión documento", formatDate(albaran.date, timezone));
+  addDetailRow("Nº albarán", `${albaran.serie}${albaran.AlbaranNumber}`);
+  addDetailRow("N.º pedido compra", albaran.orderNumber);
+  addDetailRow("Nuestro n.º documento", albaran.ourDocumentNumber);
+
+  // --- Services Table ---
+  currentY += 20;
+  const tableTop = currentY;
+  const posQty = 50;
+  const posNo = 200;
+  const posDesc = 250;
+  doc.font("Helvetica-Bold").fontSize(9);
+
+  // Header Line
+  doc
+    .moveTo(50, currentY + 15)
+    .lineTo(550, currentY + 15)
+    .stroke();
+
+  doc.text("Cantidad", posQty, currentY);
+  doc.text("Nº", posNo, currentY);
+  doc.text("Descripción", posDesc, currentY);
+
+  currentY += 25;
+  doc.font("Helvetica").fontSize(9);
+
+  if (albaran.services && albaran.services.length > 0) {
+    albaran.services.forEach((service, index) => {
+      doc.text(service.quantity.toString(), posQty, currentY, {
+        width: 50,
+        align: "right",
+      });
+      doc.text((service.number || index + 1).toString(), posNo, currentY);
+      doc.text(service.concept, posDesc, currentY, { width: 300 });
+      const textHeight = doc.heightOfString(service.concept, { width: 300 });
+      currentY += Math.max(textHeight, 15) + 5;
+    });
+  }
+
+  // Shipping Address (Fact. a-Dirección)
+  currentY += 30;
+  doc.font("Helvetica-Bold").text("Fact. a-Dirección", leftX, currentY);
+  currentY += 15;
+  doc.font("Helvetica").fontSize(10);
+  if (albaran.client && typeof albaran.client === "object") {
+    const { name, address, postalCode, city, province, country } =
+      albaran.client;
+    doc.text(name || "", leftX, currentY);
+    currentY += 12;
+    if (address) {
+      doc.text(address, leftX, currentY);
+      const addrHeight = doc.heightOfString(address, { width: 300 }); // Width estimate
+      currentY += Math.max(addrHeight, 12);
+    }
+    if (postalCode || city) {
+      doc.text(`${postalCode || ""} ${city || ""}`.trim(), leftX, currentY);
+      currentY += 12;
+    }
+    if (province) {
+      doc.text(province, leftX, currentY);
+      currentY += 12;
+    }
+    if (country) {
+      doc.text(country, leftX, currentY);
+      currentY += 12;
+    }
+  }
+
+  // --- Footer ---
+  const pageHeight = doc.page.height;
+  const bottomMargin = 50;
+
+  doc.fontSize(6).font("Helvetica").fillColor("grey");
+  doc.text(
+    "Responsable del tratamiento: VerSalIT SL CIF: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.",
+    50,
+    currentY + 50,
+    { width: 500, align: "justify" }
+  );
+
+  const bankInfoY = pageHeight - bottomMargin - 45;
+  doc.fontSize(8).fillColor("black");
+  doc.font("Helvetica-Bold").text("VerSal-IT", 50, bankInfoY);
+  doc.font("Helvetica").fontSize(7);
+  doc.text("Avenida Barcelona", 50, bankInfoY + 10);
+  doc.text("14010 Córdoba", 50, bankInfoY + 18);
+  doc.text("info@versal-it.es | https://versal-it.com/", 50, bankInfoY + 26);
+
+  doc.font("Helvetica-Bold").text("NIF: B00000000", 250, bankInfoY);
+  doc.font("Helvetica").fontSize(7);
+  doc.text("Tomo: 00000, Libro: 0, Folio: 0", 250, bankInfoY + 10);
+  doc.text("Sección: 0 Hoja: X 000000", 250, bankInfoY + 18);
+  doc.text("Inscripción 0", 250, bankInfoY + 26);
+
+  doc.font("Helvetica-Bold").text("Banco: BBVA", 430, bankInfoY);
+  doc.font("Helvetica").fontSize(7);
+  doc.text("IBAN: ES0000000000000000000000", 430, bankInfoY + 10);
+  doc.text("SWIFT: BBVAESMM", 430, bankInfoY + 18);
+
+  doc.end();
+};
+
+module.exports = {
+  buildPDF,
+  buildBudgetPDF,
+  buildAlbaranPDF,
+  sendPDFInvoiceByEmail,
+};

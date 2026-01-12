@@ -145,7 +145,8 @@ const getAllInvoices = async (
     .skip(skip)
     .limit(limit)
     .sort(sortOptions)
-    .populate("userId", "username name lastName"); // Populate user details
+    .populate("userId", "username name lastName") // Populate user details
+    .populate("client", "email");
 
   const totalItems = await Invoice.countDocuments(filter);
   const totalPages = Math.ceil(totalItems / limit);

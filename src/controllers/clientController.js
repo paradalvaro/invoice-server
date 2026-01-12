@@ -51,10 +51,20 @@ const deleteClient = async (req, res) => {
   }
 };
 
+const getNextClientNumber = async (req, res) => {
+  try {
+    const nextNumber = await clientService.getNextClientNumber();
+    res.json({ nextNumber });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 module.exports = {
   createClient,
   getClients,
   getClient,
   updateClient,
   deleteClient,
+  getNextClientNumber,
 };

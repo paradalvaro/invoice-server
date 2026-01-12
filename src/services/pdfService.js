@@ -147,8 +147,8 @@ const buildPDF = async (
   // Nº factura: invoice.serie + invoice.invoiceNumber
   addDetailRow("Nº factura", `${invoice.serie}${invoice.invoiceNumber}`);
 
-  // Nº pedido: XX0000000 (Placeholder or order number)
-  addDetailRow("Nº pedido", "XX0000000");
+  // Nº pedido: invoice.orderNumber
+  addDetailRow("Nº pedido", invoice.orderNumber || "");
 
   // Nº de documento externo: invoice.externalDocumentNumber
   addDetailRow("Nº de documento externo", invoice.externalDocumentNumber || "");
@@ -170,8 +170,8 @@ const buildPDF = async (
   }
   addDetailRow("Términos de pago", paymentTerms);
 
-  // Forma pago: Use client payment method or fallback to "Transferencia"
-  addDetailRow("Forma pago", invoice.client?.paymentMethod || "Transferencia");
+  // Forma pago: Use invoice payment method
+  addDetailRow("Forma pago", invoice.paymentMethod || "Transferencia");
 
   // --- Services Table ---
   currentY = Math.max(currentY + 20, 320); // Relative to details, at least 320

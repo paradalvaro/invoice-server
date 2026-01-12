@@ -71,6 +71,25 @@ const ClientSchema = new mongoose.Schema(
       type: String,
       default: "Transferencia",
     },
+    paymentTerms: {
+      type: String,
+      enum: [
+        "1 day",
+        "7 days",
+        "15 days",
+        "30 days",
+        "45 days",
+        "60 days",
+        "Manual",
+      ],
+      default: "1 day",
+    },
+    paymentTermsManual: {
+      type: String,
+      required: function () {
+        return this.paymentTerms === "Manual";
+      },
+    },
   },
   {
     timestamps: true,

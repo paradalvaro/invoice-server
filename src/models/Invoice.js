@@ -93,6 +93,16 @@ const InvoiceSchema = new mongoose.Schema({
     type: Number,
     required: false,
   },
+  orderNumber: {
+    type: String,
+    required: function () {
+      return this.status !== "Draft";
+    },
+  },
+  paymentMethod: {
+    type: String,
+    default: "Transferencia",
+  },
   status: {
     type: String,
     enum: ["Draft", "Pending", "Paid"],

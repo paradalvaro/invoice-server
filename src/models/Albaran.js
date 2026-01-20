@@ -48,7 +48,17 @@ const AlbaranSchema = new mongoose.Schema({
     type: [
       {
         concept: { type: String, required: true },
-        number: { type: Number },
+        number: {
+          type: String,
+          validate: {
+            validator: function (v) {
+              if (!v) return true; // Optional in Albaran
+              return /^[a-zA-Z0-9\s-]+$/.test(v);
+            },
+            message: (props) =>
+              `${props.value} is not a valid alphanumeric number!`,
+          },
+        },
         quantity: { type: Number, required: true, default: 1 },
       },
     ],

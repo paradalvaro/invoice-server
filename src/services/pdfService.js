@@ -29,7 +29,7 @@ const buildPDF = async (
   invoice,
   dataCallback,
   endCallback,
-  timezone = "Europe/Madrid"
+  timezone = "Europe/Madrid",
 ) => {
   const doc = new PDFDocument({ margin: 50, size: "A4" });
 
@@ -39,7 +39,7 @@ const buildPDF = async (
   // --- Header Section ---
 
   // QR Code in superior right corner
-  try {
+  /*try {
     const qrData = JSON.stringify({
       nifEmisor: "B00000000",
       numeroFactura: `${invoice.serie}${invoice.invoiceNumber}`,
@@ -52,7 +52,7 @@ const buildPDF = async (
     doc.image(qrBuffer, 460, 45, { width: 85 });
   } catch (error) {
     console.error("Error generating QR code:", error);
-  }
+  }*/
 
   // Logo
   // Assuming the process is running from the server root, so we go up to find client/public
@@ -118,7 +118,7 @@ const buildPDF = async (
   doc.text(
     `CIF/NIF    ${invoice.clientNIF || ""}`,
     clientX,
-    Math.max(clientY + 20, 230)
+    Math.max(clientY + 20, 230),
   );
 
   // --- Invoice Details (Left side) ---
@@ -140,7 +140,7 @@ const buildPDF = async (
     "Factura-a Nº cliente",
     invoice.client?.clientNumber
       ? invoice.client.clientNumber.toString().padStart(5, "0")
-      : "00000"
+      : "00000",
   );
 
   // Nº factura: invoice.serie + invoice.invoiceNumber
@@ -149,8 +149,8 @@ const buildPDF = async (
   // Nº pedido: invoice.orderNumber
   addDetailRow("Nº pedido", invoice.orderNumber || "");
 
-  // Nº de documento externo: invoice.externalDocumentNumber
-  addDetailRow("Nº de documento externo", invoice.externalDocumentNumber || "");
+  // Nº de pedido cliente: invoice.externalDocumentNumber
+  addDetailRow("Nº de pedido cliente", invoice.externalDocumentNumber || "");
 
   // Fecha registro: invoice.date
   addDetailRow("Fecha registro", formatDate(invoice.date, timezone));
@@ -162,7 +162,7 @@ const buildPDF = async (
   let paymentTerms = "0 días";
   if (invoice.dueDate && invoice.date) {
     const diffTime = Math.abs(
-      new Date(invoice.dueDate) - new Date(invoice.date)
+      new Date(invoice.dueDate) - new Date(invoice.date),
     );
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     paymentTerms = `${diffDays} días`;
@@ -215,12 +215,59 @@ const buildPDF = async (
   currentY += 30; // Move down below header
   doc.font("Helvetica").fontSize(9);
 
-  // Rows
+  // Group services
+  const groups = new Map();
+  const ungroupedServices = [];
+
+  if (invoice.services && invoice.services.length > 0) {
+    invoice.services.forEach((service) => {
+      const albaran = service.albaranId;
+      if (albaran) {
+        // Handle both populated object and bare ID (string or ObjectId)
+        const isPopulated =
+          typeof albaran === "object" &&
+          albaran._id &&
+          (albaran.serie || albaran.AlbaranNumber);
+        const key = (isPopulated ? albaran._id : albaran).toString();
+
+        if (!groups.has(key)) {
+          groups.set(key, {
+            albaran: isPopulated ? albaran : { _id: albaran },
+            services: [],
+          });
+        }
+        groups.get(key).services.push(service);
+      } else {
+        ungroupedServices.push(service);
+      }
+    });
+  }
+
   let totalImporteExcl = 0;
   let totalIvaAmount = 0;
 
-  if (invoice.services && invoice.services.length > 0) {
-    invoice.services.forEach((service, index) => {
+  // Render grouped services
+  for (const group of groups.values()) {
+    const { albaran, services } = group;
+
+    // Albarán Header Row
+    doc.font("Helvetica-Bold").fontSize(9);
+    const albaranIdStr = `${albaran.serie || ""}${albaran.AlbaranNumber || ""}`;
+    const orderInfo = albaran.orderNumber || albaran.ourDocumentNumber || "";
+    doc.text(
+      `Nº albarán ${albaranIdStr} ${orderInfo ? ":" : ""}`,
+      posDesc,
+      currentY,
+    );
+    if (orderInfo) {
+      doc.text(orderInfo, posDesc, currentY + 10);
+      currentY += 25;
+    } else {
+      currentY += 15;
+    }
+
+    doc.font("Helvetica").fontSize(9);
+    services.forEach((service) => {
       const qty = service.quantity || 1;
       const price = service.taxBase;
       const discountPercent = service.discount || 0;
@@ -236,7 +283,56 @@ const buildPDF = async (
       totalIvaAmount += ivaAmount;
 
       doc.text(qty.toString(), posQty, currentY);
-      doc.text((service.number || index + 1).toString(), posNo, currentY);
+      doc.text(service.number?.toString() || "", posNo, currentY);
+
+      doc.text(service.concept, posDesc + 10, currentY, { width: 180 });
+
+      doc.text(formatCurrency(price), posPrice, currentY, {
+        width: colWidth,
+        align: "right",
+      });
+      doc.text(formatCurrency(discountPercent), posDisc, currentY, {
+        width: colWidth,
+        align: "right",
+      });
+      doc.text(formatCurrency(taxableAmount), posTotal, currentY, {
+        width: colWidth + 5,
+        align: "right",
+      });
+
+      const textHeight = doc.heightOfString(service.concept, { width: 180 });
+      currentY += Math.max(textHeight, 15) + 5;
+    });
+    currentY += 10; // Extra gap between groups
+  }
+
+  // Render ungrouped services
+  if (ungroupedServices.length > 0) {
+    if (groups.size > 0) {
+      currentY += 5; // Extra separation for ungrouped services
+    }
+    doc.font("Helvetica").fontSize(9);
+    ungroupedServices.forEach((service, index) => {
+      const qty = service.quantity || 1;
+      const price = service.taxBase;
+      const discountPercent = service.discount || 0;
+
+      const subtotal = price * qty;
+      const discountAmount = subtotal * (discountPercent / 100);
+      const taxableAmount = subtotal - discountAmount;
+
+      const ivaPercent = service.iva || 21;
+      const ivaAmount = taxableAmount * (ivaPercent / 100);
+
+      totalImporteExcl += taxableAmount;
+      totalIvaAmount += ivaAmount;
+
+      doc.text(qty.toString(), posQty, currentY);
+      doc.text(
+        service.number?.toString() || (index + 1).toString(),
+        posNo,
+        currentY,
+      );
 
       doc.text(service.concept, posDesc, currentY, { width: 190 });
 
@@ -310,7 +406,7 @@ const buildPDF = async (
       "Responsable del tratamiento: VerSal-IT: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). Puede consultar los plazos de conservación en nuestra política de privacidad en info@versal-it.es / https://versal-it.com/ | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es / https://versal-it.com/ o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”. Si considera que sus derechos han sido vulnerados, puede interponer una reclamación ante la AEPD.",
     50,
     currentY + 50,
-    { width: 500, align: "justify" }
+    { width: 500, align: "justify" },
   );
 
   const pageHeight = doc.page.height;
@@ -390,7 +486,7 @@ const buildBudgetPDF = async (
   budget,
   dataCallback,
   endCallback,
-  timezone = "Europe/Madrid"
+  timezone = "Europe/Madrid",
 ) => {
   const doc = new PDFDocument({ margin: 50, size: "A4" });
 
@@ -438,7 +534,7 @@ const buildBudgetPDF = async (
       doc.text(
         `${budget.client.postalCode || ""} ${budget.client.city || ""}`.trim(),
         clientX,
-        clientY
+        clientY,
       );
       clientY += 15;
     }
@@ -494,18 +590,18 @@ const buildBudgetPDF = async (
     budget.paymentTerms === "Manual"
       ? budget.paymentTermsManual
       : budget.paymentTerms === "1 day"
-      ? "1 día"
-      : budget.paymentTerms === "7 days"
-      ? "7 días"
-      : budget.paymentTerms === "15 days"
-      ? "15 días"
-      : budget.paymentTerms === "30 days"
-      ? "30 días"
-      : budget.paymentTerms === "45 days"
-      ? "45 días"
-      : budget.paymentTerms === "60 days"
-      ? "60 días"
-      : budget.paymentTerms || "1 día";
+        ? "1 día"
+        : budget.paymentTerms === "7 days"
+          ? "7 días"
+          : budget.paymentTerms === "15 days"
+            ? "15 días"
+            : budget.paymentTerms === "30 days"
+              ? "30 días"
+              : budget.paymentTerms === "45 days"
+                ? "45 días"
+                : budget.paymentTerms === "60 days"
+                  ? "60 días"
+                  : budget.paymentTerms || "1 día";
 
   addDetailRow("Términos pago", paymentTermsText);
   addDetailRow("Condiciones envío", "Portes Pagados");
@@ -648,7 +744,7 @@ const buildBudgetPDF = async (
     "Responsable del tratamiento: VerSalIT SL CIF: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica in la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.",
     50,
     currentY + 50,
-    { width: 500, align: "justify" }
+    { width: 500, align: "justify" },
   );
 
   // Bank Info Footer
@@ -679,7 +775,7 @@ const buildAlbaranPDF = async (
   albaran,
   dataCallback,
   endCallback,
-  timezone = "Europe/Madrid"
+  timezone = "Europe/Madrid",
 ) => {
   const doc = new PDFDocument({ margin: 50, size: "A4" });
 
@@ -826,7 +922,7 @@ const buildAlbaranPDF = async (
     "Responsable del tratamiento: VerSalIT SL CIF: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.",
     50,
     currentY + 50,
-    { width: 500, align: "justify" }
+    { width: 500, align: "justify" },
   );
 
   const bankInfoY = pageHeight - bottomMargin - 45;
@@ -855,7 +951,7 @@ const buildModelo347PDF = async (
   data,
   dataCallback,
   endCallback,
-  timezone = "Europe/Madrid"
+  timezone = "Europe/Madrid",
 ) => {
   const doc = new PDFDocument({ margin: 20, size: "A4" });
   const { year, declarer, clients, summaryBoxes } = data;
@@ -892,7 +988,7 @@ const buildModelo347PDF = async (
     h,
     val = "",
     align = "left",
-    fontSize = 8
+    fontSize = 8,
   ) => {
     doc
       .rect(x, y, w, h)
@@ -949,7 +1045,7 @@ const buildModelo347PDF = async (
     doc.text(
       "DECLARACIÓN ANUAL DE OPERACIONES CON TERCERAS PERSONAS",
       titleX + 10,
-      32
+      32,
     );
     doc.fontSize(8);
     if (!pageTitleSuffix) {
@@ -964,7 +1060,7 @@ const buildModelo347PDF = async (
         .text(
           "HOJA COMÚN PARA TODAS LAS OPERACIONES (CLAVES A, B, C, D, E, F Y G)",
           titleX + 10,
-          50
+          50,
         );
     }
 
@@ -991,7 +1087,7 @@ const buildModelo347PDF = async (
     .path(
       `M 20 ${startY} L 85 ${startY} Q 90 ${startY} 90 ${startY + 5} L 90 ${
         startY + 15
-      } L 20 ${startY + 15} Z`
+      } L 20 ${startY + 15} Z`,
     )
     .fillColor(primaryColor)
     .fill();
@@ -1021,7 +1117,7 @@ const buildModelo347PDF = async (
     "Espacio reservado para la etiqueta identificativa",
     35,
     startY + 55,
-    { width: declBoxW - 30, align: "center" }
+    { width: declBoxW - 30, align: "center" },
   );
   doc
     .fontSize(5)
@@ -1029,7 +1125,7 @@ const buildModelo347PDF = async (
       "(si no dispone de etiquetas, haga constar a continuación sus datos identificativos)",
       35,
       startY + 65,
-      { width: declBoxW - 30, align: "center" }
+      { width: declBoxW - 30, align: "center" },
     );
 
   // 2. Space for ID and Barcode (Top Right)
@@ -1050,7 +1146,7 @@ const buildModelo347PDF = async (
       "Espacio reservado para número identificativo y código de barras",
       rightColX + 10,
       startY + 20,
-      { width: rightColW - 20, align: "center" }
+      { width: rightColW - 20, align: "center" },
     );
 
   // 3. Ejercicio (Bottom Right)
@@ -1064,7 +1160,7 @@ const buildModelo347PDF = async (
         rightColX + 70
       } ${ejerY} ${rightColX + 70} ${ejerY + 5} L ${rightColX + 70} ${
         ejerY + 15
-      } L ${rightColX} ${ejerY + 15} Z`
+      } L ${rightColX} ${ejerY + 15} Z`,
     )
     .fillColor(primaryColor)
     .fill();
@@ -1086,7 +1182,7 @@ const buildModelo347PDF = async (
     .text(
       "Ejercicio .................................................",
       rightColX + 20,
-      ejerY + 40
+      ejerY + 40,
     );
   drawSimpleInput(
     rightColX + rightColW - 50,
@@ -1094,7 +1190,7 @@ const buildModelo347PDF = async (
     40,
     15,
     year,
-    "center"
+    "center",
   );
 
   y = ejerY + 15 + ejerH + 10;
@@ -1120,7 +1216,7 @@ const buildModelo347PDF = async (
   drawFieldLabel(
     "Apellidos y nombre de la persona con quien relacionarse",
     135,
-    y + 32
+    y + 32,
   );
   drawSimpleInput(135, y + 40, 430, 15);
 
@@ -1146,7 +1242,7 @@ const buildModelo347PDF = async (
       "Si la presentación de esta declaración tiene por objeto incluir datos que, debiendo haber figurado en otra declaración del mismo ejercicio presentada anteriormente, hubieran sido completamente omitidos en la misma, o si el objeto es modificar parcialmente el contenido...",
       25,
       y + 5,
-      { width: 540 }
+      { width: 540 },
     );
 
   doc
@@ -1156,7 +1252,7 @@ const buildModelo347PDF = async (
   doc.text(
     "Declaración complementaria por modificación o anulación de datos",
     30,
-    y + 55
+    y + 55,
   );
   drawXCheckBox(260, y + 53);
 
@@ -1195,7 +1291,7 @@ const buildModelo347PDF = async (
       c: "02",
       v: formatCurrency(
         summaryBoxes?.box02 ??
-          clients.reduce((acc, c) => acc + c.totalAmount, 0)
+          clients.reduce((acc, c) => acc + c.totalAmount, 0),
       ),
     },
     { l: "Número total de inmuebles", c: "03", v: summaryBoxes?.box03 ?? "0" },
@@ -1215,7 +1311,7 @@ const buildModelo347PDF = async (
         r.l +
           " ....................................................................................................",
         25,
-        ry
+        ry,
       );
     doc
       .rect(410, ry - 2, 20, 13)
@@ -1245,7 +1341,7 @@ const buildModelo347PDF = async (
     .path(
       `M 20 ${y} L 85 ${y} Q 90 ${y} 90 ${y + 5} L 90 ${y + 15} L 20 ${
         y + 15
-      } Z`
+      } Z`,
     )
     .fillColor(primaryColor)
     .fill();
@@ -1329,7 +1425,7 @@ const buildModelo347PDF = async (
         rightBoxX + 165
       } ${y} ${rightBoxX + 165} ${y + 5} L ${rightBoxX + 165} ${
         y + 15
-      } L ${rightBoxX} ${y + 15} Z`
+      } L ${rightBoxX} ${y + 15} Z`,
     )
     .fillColor(primaryColor)
     .fill();
@@ -1396,7 +1492,7 @@ const buildModelo347PDF = async (
       .text(
         "Espacio reservado para numeración por código de barras",
         350,
-        y + 20
+        y + 20,
       );
 
     y += 65;
@@ -1432,14 +1528,14 @@ const buildModelo347PDF = async (
         "Apellidos y nombre, razón social o denominación del declarado",
         295,
         blockY,
-        5.5
+        5.5,
       );
       drawSimpleInput(
         295,
         blockY + 7,
         270,
         13,
-        hasData ? client.clientName : ""
+        hasData ? client.clientName : "",
       );
 
       blockY += 26;
@@ -1453,7 +1549,7 @@ const buildModelo347PDF = async (
         13,
         hasData && client.clientPostalCode
           ? client.clientPostalCode.substring(0, 2)
-          : ""
+          : "",
       );
 
       drawFieldLabel("País (Código)", 75, blockY, 5.5);
@@ -1480,7 +1576,7 @@ const buildModelo347PDF = async (
         drawXCheckBox(
           checkX[idx] + 20,
           blockY + 8,
-          hasData && c.includes("Arrendamiento") ? client.isRental : false
+          hasData && c.includes("Arrendamiento") ? client.isRental : false,
         );
       });
 
@@ -1514,14 +1610,14 @@ const buildModelo347PDF = async (
         220,
         13,
         hasData ? formatCurrency(client.totalAmount) : "0,00",
-        "right"
+        "right",
       );
 
       drawFieldLabel(
         "Importe anual percibido por transmisiones de inmuebles sujetas a IVA",
         255,
         blockY,
-        5.5
+        5.5,
       );
       drawSimpleInput(255, blockY + 7, 155, 13, "0,00", "right");
 
@@ -1529,7 +1625,7 @@ const buildModelo347PDF = async (
         "Importe anual de las operaciones devengadas con criterio IVA de caja",
         420,
         blockY,
-        5.5
+        5.5,
       );
       drawSimpleInput(420, blockY + 7, 145, 13, "0,00", "right");
 
@@ -1540,7 +1636,7 @@ const buildModelo347PDF = async (
       drawFieldLabel(
         "Importe percibido por transmisiones de inmuebles sujetas a IVA",
         290,
-        blockY
+        blockY,
       );
 
       const qtrVals =
@@ -1564,7 +1660,7 @@ const buildModelo347PDF = async (
           11,
           formatCurrency(qtrVals[i]),
           "right",
-          7
+          7,
         );
 
         // Right column: Importe percibido por transmisiones
@@ -1596,7 +1692,7 @@ const buildModelo347PDF = async (
       .text(
         "Suma de importes anuales de esta hoja ..............................................................",
         25,
-        footerY + 25
+        footerY + 25,
       );
     const sumPage = chunk.reduce((acc, c) => acc + c.totalAmount, 0);
     drawSimpleInput(
@@ -1606,7 +1702,7 @@ const buildModelo347PDF = async (
       15,
       formatCurrency(sumPage),
       "right",
-      10
+      10,
     );
   });
 

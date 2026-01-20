@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Invoice = require("../models/Invoice");
+const Albaran = require("../models/Albaran");
 
 const getAllInvoices = async (
   userId,
@@ -229,19 +230,51 @@ const getInvoiceById = async (id, userId, userType) => {
     userType === "Admin" || userType === "SuperAdmin"
       ? { _id: id }
       : { _id: id, userId };
-  const invoice = await Invoice.findOne(filter).populate("client");
+  const invoice = await Invoice.findOne(filter)
+    .populate("client")
+    .populate("services.albaranId");
   if (!invoice) {
     throw new Error("Invoice not found");
   }
   return invoice;
 };
-
 const updateInvoice = async (id, userId, userType, updateData) => {
+  // Sanitize updateData to prevent conflicts and restricted field updates
+  const forbiddenFields = [
+    "_id",
+    "__v",
+    "history",
+    "userId",
+    "createdAt",
+    "updatedAt",
+    "hash",
+  ];
+  forbiddenFields.forEach((field) => delete updateData[field]);
+
+  // Flatten albaranId in services to avoid Mongoose casting issues if they are objects
   if (updateData.services && Array.isArray(updateData.services)) {
-    updateData.totalAmount = updateData.services.reduce(
-      (acc, service) => acc + (service.taxBase + (service.iva || 0)),
-      0,
-    );
+    updateData.services = updateData.services.map((service) => ({
+      ...service,
+      albaranId:
+        service.albaranId && typeof service.albaranId === "object"
+          ? service.albaranId._id
+          : service.albaranId,
+    }));
+
+    updateData.totalAmount = updateData.services.reduce((acc, service) => {
+      const base = parseFloat(service.taxBase) || 0;
+      const quantity = parseFloat(service.quantity) || 0;
+      const discount = parseFloat(service.discount) || 0;
+      const ivaPercent = parseFloat(service.iva) || 0;
+
+      const subtotal = base * quantity;
+      const discountAmount = subtotal * (discount / 100);
+      const taxableAmount = subtotal - discountAmount;
+      const ivaAmount = taxableAmount * (ivaPercent / 100);
+
+      return acc + taxableAmount + ivaAmount;
+    }, 0);
+    updateData.totalAmount = parseFloat(updateData.totalAmount.toFixed(2));
   }
 
   // Update balanceDue if totalAmount changes and not paid
@@ -334,6 +367,7 @@ module.exports = {
   getInvoicePreviousHash,
   markAsPaid,
   getModelo347Data,
+  linkAlbaranesToInvoice,
 };
 
 async function markAsPaid(id, userId, userType) {
@@ -456,4 +490,35 @@ async function getModelo347Data(userId, userType, year) {
   ]);
 
   return aggregation;
+}
+
+async function linkAlbaranesToInvoice(invoiceId, albaranIds) {
+  if (!albaranIds || !Array.isArray(albaranIds) || albaranIds.length === 0) {
+    return;
+  }
+
+  await Albaran.updateMany(
+    { _id: { $in: albaranIds } },
+    { $set: { invoiceId: invoiceId, status: "Done" } },
+  );
+
+  // Log albaran associations in history
+  const linkedAlbaranes = await Albaran.find({
+    _id: { $in: albaranIds },
+  });
+
+  const historyEvents = linkedAlbaranes.map((alb) => ({
+    type: "ALBARAN_LINKED",
+    date: new Date(),
+    description: `Albarán ${alb.serie} ${alb.AlbaranNumber} vinculado`,
+    details: {
+      albaranId: alb._id,
+      serie: alb.serie,
+      number: alb.AlbaranNumber,
+    },
+  }));
+
+  await Invoice.findByIdAndUpdate(invoiceId, {
+    $push: { history: { $each: historyEvents } },
+  });
 }

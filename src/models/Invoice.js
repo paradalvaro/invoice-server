@@ -64,7 +64,17 @@ const InvoiceSchema = new mongoose.Schema({
     type: [
       {
         concept: { type: String, required: true },
-        number: { type: Number },
+        number: {
+          type: String,
+          validate: {
+            validator: function (v) {
+              if (!v) return true; // Optional in Invoice
+              return /^[a-zA-Z0-9\s-]+$/.test(v);
+            },
+            message: (props) =>
+              `${props.value} is not a valid alphanumeric number!`,
+          },
+        },
         quantity: { type: Number, required: true, default: 1 },
         taxBase: { type: Number, required: true },
         discount: { type: Number, default: 0 },
@@ -91,14 +101,19 @@ const InvoiceSchema = new mongoose.Schema({
     },
   },
   externalDocumentNumber: {
-    type: Number,
+    type: String,
     required: false,
+    validate: {
+      validator: function (v) {
+        if (!v) return true; // Optional in Invoice
+        return /^[a-zA-Z0-9\s-]+$/.test(v);
+      },
+      message: (props) => `${props.value} is not a valid alphanumeric number!`,
+    },
   },
   orderNumber: {
     type: String,
-    required: function () {
-      return this.status !== "Draft";
-    },
+    required: false,
   },
   paymentMethod: {
     type: String,

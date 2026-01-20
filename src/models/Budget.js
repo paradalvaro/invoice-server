@@ -38,7 +38,17 @@ const BudgetSchema = new mongoose.Schema({
     type: [
       {
         concept: { type: String, required: true },
-        number: { type: Number, required: true },
+        number: {
+          type: String,
+          required: true,
+          validate: {
+            validator: function (v) {
+              return /^[a-zA-Z0-9\s-]+$/.test(v);
+            },
+            message: (props) =>
+              `${props.value} is not a valid alphanumeric number!`,
+          },
+        },
         quantity: { type: Number, required: true, default: 1 },
         taxBase: { type: Number, required: true },
         discount: { type: Number, default: 0 },

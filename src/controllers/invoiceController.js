@@ -1,3 +1,5 @@
+const mongoose = require("mongoose");
+const Invoice = require("../models/Invoice");
 const invoiceService = require("../services/invoiceService");
 
 const pdfService = require("../services/pdfService");
@@ -53,35 +55,11 @@ const createInvoice = async (req, res) => {
       invoice = await invoiceService.createInvoice(invoiceData);
     }
 
-    if (
-      req.body.albaranIds &&
-      Array.isArray(req.body.albaranIds) &&
-      req.body.albaranIds.length > 0 &&
-      invoice
-    ) {
-      await Albaran.updateMany(
-        { _id: { $in: req.body.albaranIds } },
-        { $set: { invoiceId: invoice._id, status: "Done" } },
+    if (req.body.albaranIds && req.body.albaranIds.length > 0 && invoice) {
+      await invoiceService.linkAlbaranesToInvoice(
+        invoice._id,
+        req.body.albaranIds,
       );
-
-      // Log albaran associations in history
-      const linkedAlbaranes = await Albaran.find({
-        _id: { $in: req.body.albaranIds },
-      });
-      const historyEvents = linkedAlbaranes.map((alb) => ({
-        type: "ALBARAN_LINKED",
-        date: new Date(),
-        description: `Albarán ${alb.serie} ${alb.AlbaranNumber} vinculado`,
-        details: {
-          albaranId: alb._id,
-          serie: alb.serie,
-          number: alb.AlbaranNumber,
-        },
-      }));
-
-      await mongoose.model("Invoice").findByIdAndUpdate(invoice._id, {
-        $push: { history: { $each: historyEvents } },
-      });
     }
 
     //await agregarFacturaACola({ invoice });
@@ -178,7 +156,6 @@ const sendInvoiceByEmail = async (req, res) => {
         await pdfService.sendPDFInvoiceByEmail(pdfBuffer, invoice, emails);
 
         // Log email event in history
-        const Invoice = require("../models/Invoice");
         await Invoice.findByIdAndUpdate(invoice._id, {
           $push: {
             history: {

@@ -11,7 +11,7 @@ const getAllInvoices = async (
   search = "",
   searchField = "clientName",
   status = "",
-  dueDateRange = ""
+  dueDateRange = "",
 ) => {
   const skip = (page - 1) * limit;
 
@@ -42,7 +42,7 @@ const getAllInvoices = async (
     const startOfToday = new Date(
       now.getFullYear(),
       now.getMonth(),
-      now.getDate()
+      now.getDate(),
     );
 
     if (dueDateRange === "thisMonth") {
@@ -53,14 +53,14 @@ const getAllInvoices = async (
         0,
         23,
         59,
-        59
+        59,
       );
       filter.dueDate = { $gte: startOfMonth, $lte: endOfMonth };
     } else if (dueDateRange === "nextMonth") {
       const startOfNextMonth = new Date(
         now.getFullYear(),
         now.getMonth() + 1,
-        1
+        1,
       );
       const endOfNextMonth = new Date(
         now.getFullYear(),
@@ -68,7 +68,7 @@ const getAllInvoices = async (
         0,
         23,
         59,
-        59
+        59,
       );
       filter.dueDate = { $gte: startOfNextMonth, $lte: endOfNextMonth };
     } else if (dueDateRange === "moreThanTwoMonths") {
@@ -78,7 +78,7 @@ const getAllInvoices = async (
         0,
         23,
         59,
-        59
+        59,
       );
       filter.dueDate = { $gt: endOfNextMonth };
     } else if (dueDateRange === "next30Days") {
@@ -211,7 +211,16 @@ const getAllInvoices = async (
 };
 
 const createInvoice = async (invoiceData) => {
-  const invoice = new Invoice(invoiceData);
+  const invoice = new Invoice({
+    ...invoiceData,
+    history: [
+      {
+        type: "CREATED",
+        date: new Date(),
+        description: "Factura creada",
+      },
+    ],
+  });
   return await invoice.save();
 };
 
@@ -231,7 +240,7 @@ const updateInvoice = async (id, userId, userType, updateData) => {
   if (updateData.services && Array.isArray(updateData.services)) {
     updateData.totalAmount = updateData.services.reduce(
       (acc, service) => acc + (service.taxBase + (service.iva || 0)),
-      0
+      0,
     );
   }
 
@@ -247,12 +256,25 @@ const updateInvoice = async (id, userId, userType, updateData) => {
       ? { _id: id }
       : { _id: id, userId };
 
+  // Fetch current to detect changes
+  const currentInvoice = await Invoice.findOne(filter);
+  if (!currentInvoice) {
+    throw new Error("Invoice not found");
+  }
+
+  if (updateData.status && updateData.status !== currentInvoice.status) {
+    if (!updateData.$push) updateData.$push = {};
+    updateData.$push.history = {
+      type: "STATUS_CHANGE",
+      date: new Date(),
+      description: `Estado cambiado de ${currentInvoice.status} a ${updateData.status}`,
+      details: { from: currentInvoice.status, to: updateData.status },
+    };
+  }
+
   const invoice = await Invoice.findOneAndUpdate(filter, updateData, {
     new: true,
   });
-  if (!invoice) {
-    throw new Error("Invoice not found");
-  }
   return invoice;
 };
 
@@ -319,18 +341,33 @@ async function markAsPaid(id, userId, userType) {
     userType === "Admin" || userType === "SuperAdmin"
       ? { _id: id }
       : { _id: id, userId };
-  const invoice = await Invoice.findOneAndUpdate(
-    filter,
-    { status: "Paid", balanceDue: 0 },
-    { new: true }
-  );
-  if (!invoice) {
+
+  // Fetch current to detect if it's already paid (optional but good for log)
+  const currentInvoice = await Invoice.findOne(filter);
+  if (!currentInvoice) {
     throw new Error("Invoice not found");
   }
+
+  const invoice = await Invoice.findOneAndUpdate(
+    filter,
+    {
+      status: "Paid",
+      balanceDue: 0,
+      $push: {
+        history: {
+          type: "STATUS_CHANGE",
+          date: new Date(),
+          description: `Estado cambiado de ${currentInvoice.status} a Paid (Manual)`,
+          details: { from: currentInvoice.status, to: "Paid" },
+        },
+      },
+    },
+    { new: true },
+  );
   return invoice;
 }
 
-async function getModelo347Data(year, userType) {
+async function getModelo347Data(userId, userType, year) {
   const startOfYear = new Date(year, 0, 1);
   const endOfYear = new Date(year, 11, 31, 23, 59, 59);
 
@@ -340,6 +377,11 @@ async function getModelo347Data(year, userType) {
     type: { $ne: "F2" },
     client: { $exists: true, $ne: null },
   };
+
+  // Filter by userId if not Admin/SuperAdmin
+  if (userType !== "Admin" && userType !== "SuperAdmin") {
+    matchStage.userId = new mongoose.Types.ObjectId(userId);
+  }
 
   const aggregation = await Invoice.aggregate([
     { $match: matchStage },

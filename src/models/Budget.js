@@ -38,11 +38,12 @@ const BudgetSchema = new mongoose.Schema({
     type: [
       {
         concept: { type: String, required: true },
-        number: { type: Number },
+        number: { type: Number, required: true },
         quantity: { type: Number, required: true, default: 1 },
         taxBase: { type: Number, required: true },
         discount: { type: Number, default: 0 },
         iva: { type: Number, required: true, default: 21 },
+        albaranId: { type: mongoose.Schema.Types.ObjectId, ref: "Albaran" },
       },
     ],
     validate: {

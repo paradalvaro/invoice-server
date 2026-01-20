@@ -69,6 +69,7 @@ const ClientSchema = new mongoose.Schema(
     },
     paymentMethod: {
       type: String,
+      enum: ["Transferencia", "Efectivo", "Tarjeta", "Domiciliación bancaria"],
       default: "Transferencia",
     },
     paymentTerms: {
@@ -89,6 +90,15 @@ const ClientSchema = new mongoose.Schema(
       required: function () {
         return this.paymentTerms === "Manual";
       },
+    },
+    contactPerson: {
+      type: [
+        {
+          name: { type: String, required: true },
+          lastName: { type: String, required: true },
+          phoneNumber: { type: String, required: true },
+        },
+      ],
     },
   },
   {

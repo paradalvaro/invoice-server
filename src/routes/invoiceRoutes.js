@@ -8,6 +8,7 @@ router.use(authMiddleware);
 
 router.get("/", invoiceController.getInvoices);
 router.get("/modelo347", invoiceController.getModelo347);
+router.post("/modelo347/pdf", invoiceController.generateModelo347Pdf);
 router.get("/next-number", invoiceController.getNextInvoiceNumber);
 router.post("/", invoiceController.createInvoice);
 router.get("/:id", invoiceController.getInvoice);

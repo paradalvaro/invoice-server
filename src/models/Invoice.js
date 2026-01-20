@@ -69,6 +69,7 @@ const InvoiceSchema = new mongoose.Schema({
         taxBase: { type: Number, required: true },
         discount: { type: Number, default: 0 },
         iva: { type: Number, required: true, default: 21 },
+        albaranId: { type: mongoose.Schema.Types.ObjectId, ref: "Albaran" },
       },
     ],
     required: true,
@@ -101,6 +102,7 @@ const InvoiceSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
+    enum: ["Transferencia", "Efectivo", "Tarjeta", "Domiciliación bancaria"],
     default: "Transferencia",
   },
   status: {
@@ -136,6 +138,17 @@ const InvoiceSchema = new mongoose.Schema({
       return /^(R1|R4)$/.test(this.type);
     },
   },
+  history: [
+    {
+      type: {
+        type: String,
+        enum: ["CREATED", "STATUS_CHANGE", "EMAIL_SENT", "ALBARAN_LINKED"],
+      },
+      date: { type: Date, default: Date.now },
+      description: String,
+      details: mongoose.Schema.Types.Mixed,
+    },
+  ],
 });
 
 InvoiceSchema.pre("validate", async function () {

@@ -12,6 +12,9 @@ const getAlbaranes = async (req, res) => {
       search,
       searchField,
       status,
+      client,
+      pendingInvoice,
+      invoiceId,
     } = req.query;
     const result = await albaranService.getAllAlbaranes(
       req.user.id,
@@ -22,7 +25,10 @@ const getAlbaranes = async (req, res) => {
       order,
       search,
       searchField,
-      status
+      status,
+      client,
+      pendingInvoice,
+      invoiceId,
     );
     res.json(result);
   } catch (err) {
@@ -45,7 +51,7 @@ const getAlbaran = async (req, res) => {
     const albaran = await albaranService.getAlbaranById(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
     res.json(albaran);
   } catch (err) {
@@ -59,7 +65,7 @@ const updateAlbaran = async (req, res) => {
       req.params.id,
       req.user.id,
       req.user.type,
-      req.body
+      req.body,
     );
     res.json(albaran);
   } catch (err) {
@@ -72,7 +78,7 @@ const deleteAlbaran = async (req, res) => {
     await albaranService.deleteAlbaran(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
     res.json({ message: "Albaran removed" });
   } catch (err) {
@@ -95,7 +101,7 @@ const generatePdf = async (req, res) => {
     const albaran = await albaranService.getAlbaranById(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
 
     const stream = res.writeHead(200, {
@@ -112,7 +118,7 @@ const generatePdf = async (req, res) => {
       albaran,
       (chunk) => stream.write(chunk),
       () => stream.end(),
-      timezone
+      timezone,
     );
   } catch (err) {
     res.status(404).json({ message: err.message });

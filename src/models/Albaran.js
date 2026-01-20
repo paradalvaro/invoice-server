@@ -14,6 +14,16 @@ const AlbaranSchema = new mongoose.Schema({
     ref: "User",
     required: true,
   },
+  budgetId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Budget",
+    required: false,
+  },
+  invoiceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Invoice",
+    required: false,
+  },
   serie: {
     type: String,
     enum: ["AL2025", "AL2026"],

@@ -29,7 +29,7 @@ const getInvoices = async (req, res) => {
       search,
       searchField,
       status,
-      dueDateRange
+      dueDateRange,
     );
     res.json(result);
   } catch (err) {
@@ -39,18 +39,50 @@ const getInvoices = async (req, res) => {
 
 const createInvoice = async (req, res) => {
   try {
+    let invoice;
     if (req.body.status === "Draft") {
       const invoiceData = { ...req.body, userId: req.user.id };
-      const invoice = await invoiceService.createInvoice(invoiceData);
-      return res.status(201).json(invoice);
+      invoice = await invoiceService.createInvoice(invoiceData);
+    } else {
+      const previousHash = await invoiceService.getInvoicePreviousHash(
+        req.body.serie,
+        req.body.invoiceNumber,
+      );
+      const hash = utils.makeInvoiceHash(req.body, previousHash);
+      const invoiceData = { ...req.body, userId: req.user.id, hash };
+      invoice = await invoiceService.createInvoice(invoiceData);
     }
-    const previousHash = await invoiceService.getInvoicePreviousHash(
-      req.body.serie,
-      req.body.invoiceNumber
-    );
-    const hash = utils.makeInvoiceHash(req.body, previousHash);
-    const invoiceData = { ...req.body, userId: req.user.id, hash };
-    const invoice = await invoiceService.createInvoice(invoiceData);
+
+    if (
+      req.body.albaranIds &&
+      Array.isArray(req.body.albaranIds) &&
+      req.body.albaranIds.length > 0 &&
+      invoice
+    ) {
+      await Albaran.updateMany(
+        { _id: { $in: req.body.albaranIds } },
+        { $set: { invoiceId: invoice._id, status: "Done" } },
+      );
+
+      // Log albaran associations in history
+      const linkedAlbaranes = await Albaran.find({
+        _id: { $in: req.body.albaranIds },
+      });
+      const historyEvents = linkedAlbaranes.map((alb) => ({
+        type: "ALBARAN_LINKED",
+        date: new Date(),
+        description: `Albarán ${alb.serie} ${alb.AlbaranNumber} vinculado`,
+        details: {
+          albaranId: alb._id,
+          serie: alb.serie,
+          number: alb.AlbaranNumber,
+        },
+      }));
+
+      await mongoose.model("Invoice").findByIdAndUpdate(invoice._id, {
+        $push: { history: { $each: historyEvents } },
+      });
+    }
 
     //await agregarFacturaACola({ invoice });
 
@@ -65,7 +97,7 @@ const getInvoice = async (req, res) => {
     const invoice = await invoiceService.getInvoiceById(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
     res.json(invoice);
   } catch (err) {
@@ -79,7 +111,7 @@ const updateInvoice = async (req, res) => {
       req.params.id,
       req.user.id,
       req.user.type,
-      req.body
+      req.body,
     );
     res.json(invoice);
   } catch (err) {
@@ -92,7 +124,7 @@ const deleteInvoice = async (req, res) => {
     await invoiceService.deleteInvoice(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
     res.json({ message: "Invoice removed" });
   } catch (err) {
@@ -105,7 +137,7 @@ const generatePdf = async (req, res) => {
     const invoice = await invoiceService.getInvoiceById(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
 
     const stream = res.writeHead(200, {
@@ -120,7 +152,7 @@ const generatePdf = async (req, res) => {
       invoice,
       (chunk) => stream.write(chunk),
       () => stream.end(),
-      timezone
+      timezone,
     );
   } catch (err) {
     res.status(404).json({ message: err.message });
@@ -132,7 +164,7 @@ const sendInvoiceByEmail = async (req, res) => {
     const invoice = await invoiceService.getInvoiceById(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
     const { emails } = req.body;
     let buffers = [];
@@ -144,6 +176,20 @@ const sendInvoiceByEmail = async (req, res) => {
       try {
         const pdfBuffer = Buffer.concat(buffers);
         await pdfService.sendPDFInvoiceByEmail(pdfBuffer, invoice, emails);
+
+        // Log email event in history
+        const Invoice = require("../models/Invoice");
+        await Invoice.findByIdAndUpdate(invoice._id, {
+          $push: {
+            history: {
+              type: "EMAIL_SENT",
+              date: new Date(),
+              description: `Factura enviada por correo a: ${emails}`,
+              details: { recipients: emails },
+            },
+          },
+        });
+
         res.json({ message: "Invoice sent by email" });
       } catch (emailErr) {
         console.error("Error sending email:", emailErr);
@@ -170,7 +216,7 @@ const markAsPaid = async (req, res) => {
     const invoice = await invoiceService.markAsPaid(
       req.params.id,
       req.user.id,
-      req.user.type
+      req.user.type,
     );
     res.json(invoice);
   } catch (err) {
@@ -181,7 +227,11 @@ const markAsPaid = async (req, res) => {
 const getModelo347 = async (req, res) => {
   try {
     const { year } = req.query; // Assuming year is passed as a query parameter
-    const data = await invoiceService.getModelo347Data(req.user.id, year);
+    const data = await invoiceService.getModelo347Data(
+      req.user.id,
+      req.user.type,
+      year,
+    );
     res.json(data);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -196,7 +246,55 @@ module.exports = {
   deleteInvoice,
   getModelo347,
   generatePdf,
+  generateModelo347Pdf,
   getNextInvoiceNumber: getNextNumber,
   sendInvoiceByEmail,
   markAsPaid,
 };
+
+async function generateModelo347Pdf(req, res) {
+  try {
+    const {
+      year,
+      declarerInfo,
+      selectedClientIds,
+      summaryBoxes,
+      rentalClientIds,
+    } = req.body;
+
+    // Fetch all candidates again to ensure data integrity
+    const allCandidates = await invoiceService.getModelo347Data(
+      req.user.id,
+      req.user.type,
+      year,
+    );
+
+    // Filter only selected clients and mark rentals
+    const clients = allCandidates
+      .filter((c) => selectedClientIds.includes(c._id.toString()))
+      .map((c) => ({
+        ...c,
+        isRental: rentalClientIds
+          ? rentalClientIds.includes(c._id.toString())
+          : false,
+      }));
+
+    const stream = res.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment;filename=Modelo347_${year}.pdf`,
+    });
+
+    const settings = await Settings.findOne();
+    const timezone = settings ? settings.timezone : "Europe/Madrid";
+
+    pdfService.buildModelo347PDF(
+      { year, declarer: declarerInfo, clients, summaryBoxes },
+      (chunk) => stream.write(chunk),
+      () => stream.end(),
+      timezone,
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+}

@@ -2,6 +2,7 @@ const PDFDocument = require("pdfkit");
 const QRCode = require("qrcode");
 const nodemailer = require("nodemailer");
 const path = require("path");
+const Settings = require("../models/Settings");
 
 const email = process.env.EMAIL;
 const password = process.env.PASSWORD;
@@ -23,6 +24,41 @@ const formatDate = (date, timezone = "Europe/Madrid") => {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
+};
+
+/**
+ * Helper to draw logo on PDF
+ * @param {Object} doc - PDFKit document
+ * @param {Object} settings - System settings
+ */
+const drawLogo = async (doc, settings) => {
+  const logo = settings?.logo;
+
+  if (logo && logo.startsWith("data:image")) {
+    try {
+      const base64Data = logo.split(",")[1];
+      const logoBuffer = Buffer.from(base64Data, "base64");
+      doc.image(logoBuffer, 50, 45, { width: 150 });
+    } catch (err) {
+      console.error("Error embedding custom logo:", err);
+      // Fallback
+      const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
+      try {
+        doc.image(logoPath, 50, 45, { width: 150 });
+      } catch (e) {
+        doc.fontSize(20).text("VerSalIT", 50, 45);
+      }
+    }
+  } else {
+    // Default logo
+    const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
+    try {
+      doc.image(logoPath, 50, 45, { width: 150 });
+    } catch (err) {
+      console.warn("Logo not found at:", logoPath);
+      doc.fontSize(20).text("VerSalIT", 50, 45);
+    }
+  }
 };
 
 const buildPDF = async (
@@ -54,23 +90,9 @@ const buildPDF = async (
     console.error("Error generating QR code:", error);
   }*/
 
-  // Logo
-  // Assuming the process is running from the server root, so we go up to find client/public
-  // Workspace root: d:\Proyectos Ramiro\Proyecto Facturas
-  // Server root: d:\Proyectos Ramiro\Proyecto Facturas\server
-  // Image path: d:\Proyectos Ramiro\Proyecto Facturas\client\public\VerSalIT-bg.png
-  // So from server/src/services (where this file is ideally), we go: ../../../client/public
-  // But process.cwd() is likely the server root "d:\Proyectos Ramiro\Proyecto Facturas\server" or just "d:\Proyectos Ramiro\Proyecto Facturas" depending on how it's started.
-  // Reliable way: try absolute path based on known structure or relative to __dirname.
-  const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
-
-  try {
-    doc.image(logoPath, 50, 45, { width: 150 });
-  } catch (err) {
-    console.warn("Logo not found at:", logoPath);
-    // Fallback text if logo missing
-    doc.fontSize(20).text("VerSalIT", 50, 45);
-  }
+  // Logo handling
+  const settings = await Settings.findOne();
+  await drawLogo(doc, settings);
 
   doc.moveDown(4);
 
@@ -401,13 +423,15 @@ const buildPDF = async (
   // --- Footer ---
   // Legal text (GDPR) positioned relatively below the totals
   doc.fontSize(6).font("Helvetica").fillColor("grey");
-  doc.text(
+  const company = settings?.company || {};
+  const registry = settings?.registry || {};
+  const bank = settings?.bank || {};
+
+  const legalText =
     invoice.legalText ||
-      "Responsable del tratamiento: VerSal-IT: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). Puede consultar los plazos de conservación en nuestra política de privacidad en info@versal-it.es / https://versal-it.com/ | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es / https://versal-it.com/ o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”. Si considera que sus derechos han sido vulnerados, puede interponer una reclamación ante la AEPD.",
-    50,
-    currentY + 50,
-    { width: 500, align: "justify" },
-  );
+    `Responsable del tratamiento: ${company.name || "VerSal-IT"}: ${company.nif || "B00000000"} Dirección: ${company.address || ""}, ${company.postalCode || ""} ${company.city || ""} Correo electrónico: ${company.email || ""} | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). Puede consultar los plazos de conservación en nuestra política de privacidad en ${company.email || ""} / ${company.url || ""} | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica en la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en ${company.email || ""} / ${company.url || ""} o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”. Si considera que sus derechos han sido vulnerados, puede interponer una reclamación ante la AEPD.`;
+
+  doc.text(legalText, 50, currentY + 50, { width: 500, align: "justify" });
 
   const pageHeight = doc.page.height;
   const bottomMargin = 50;
@@ -417,24 +441,48 @@ const buildPDF = async (
   doc.fontSize(8).fillColor("black");
 
   // Left: Company Info
-  doc.font("Helvetica-Bold").text("VerSal-IT", 50, bankInfoY);
+  doc.font("Helvetica-Bold").text(company.name || "VerSal-IT", 50, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("Avenida Barcelona", 50, bankInfoY + 10);
-  doc.text("14010 Córdoba", 50, bankInfoY + 18);
-  doc.text("info@versal-it.es | https://versal-it.com/", 50, bankInfoY + 26);
+  doc.text(company.address || "Avenida Barcelona", 50, bankInfoY + 10);
+  doc.text(
+    `${company.postalCode || "14010"} ${company.city || "Córdoba"}`,
+    50,
+    bankInfoY + 18,
+  );
+  doc.text(
+    `${company.email || "info@versal-it.es"} | ${company.url || "https://versal-it.com/"}`,
+    50,
+    bankInfoY + 26,
+  );
 
   // Center: Registry Info
-  doc.font("Helvetica-Bold").text("NIF: B00000000", 250, bankInfoY);
+  doc
+    .font("Helvetica-Bold")
+    .text(`NIF: ${company.nif || "B00000000"}`, 250, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("Tomo: 00000, Libro: 0, Folio: 000", 250, bankInfoY + 10);
-  doc.text("Sección: 0 Hoja: X 000000", 250, bankInfoY + 18);
-  doc.text("Inscripción 0", 250, bankInfoY + 26);
+  doc.text(
+    `Tomo: ${registry.tomo || "00000"}, Libro: ${registry.libro || "0"}, Folio: ${registry.folio || "000"}`,
+    250,
+    bankInfoY + 10,
+  );
+  doc.text(
+    `Sección: ${registry.seccion || "0"} Hoja: ${registry.hoja || "X 000000"}`,
+    250,
+    bankInfoY + 18,
+  );
+  doc.text(`Inscripción ${registry.inscripcion || "0"}`, 250, bankInfoY + 26);
 
   // Right: Bank Info
-  doc.font("Helvetica-Bold").text("Banco: BBVA", 430, bankInfoY);
+  doc
+    .font("Helvetica-Bold")
+    .text(`Banco: ${bank.name || "BBVA"}`, 430, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("IBAN: ES0000000000000000000000", 430, bankInfoY + 10);
-  doc.text("SWIFT: XXXXXXXX", 430, bankInfoY + 18);
+  doc.text(
+    `IBAN: ${bank.iban || "ES0000000000000000000000"}`,
+    430,
+    bankInfoY + 10,
+  );
+  doc.text(`SWIFT: ${bank.swift || "XXXXXXXX"}`, 430, bankInfoY + 18);
 
   // --- QR Code (Optional/Preserved from old implementation but moved?) ---
   // If we want it, we can put it in. The user request didn't explicitly forbid it, but wanted "like the picture".
@@ -495,14 +543,9 @@ const buildBudgetPDF = async (
 
   // --- Header Section ---
 
-  // Logo
-  const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
-  try {
-    doc.image(logoPath, 50, 45, { width: 150 });
-  } catch (err) {
-    console.warn("Logo not found at:", logoPath);
-    doc.fontSize(20).text("VerSalIT", 50, 45);
-  }
+  // Logo handling
+  const settings = await Settings.findOne();
+  await drawLogo(doc, settings);
 
   doc.moveDown(4);
 
@@ -740,33 +783,58 @@ const buildBudgetPDF = async (
 
   // Legal text (GDPR)
   doc.fontSize(6).font("Helvetica").fillColor("grey");
-  doc.text(
-    "Responsable del tratamiento: VerSalIT SL CIF: B00000000 Dirección: Avenida Barcelona, 14010 Córdoba Correo electrónico: info@versal-it.es | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica in la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en info@versal-it.es o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.",
-    50,
-    currentY + 50,
-    { width: 500, align: "justify" },
-  );
+  const company = settings?.company || {};
+  const registry = settings?.registry || {};
+  const bank = settings?.bank || {};
+
+  const legalText = `Responsable del tratamiento: ${company.name || "VerSalIT SL"} CIF: ${company.nif || "B00000000"} Dirección: ${company.address || ""}, ${company.postalCode || ""} ${company.city || ""} Correo electrónico: ${company.email || ""} | Finalidades: la emisión de facturas para el cobro de los servicios prestados y/o realización del presupuesto ajustado a sus necesidades | Legitimación: por ser los datos necesarios para la ejecución de un contrato en el que el interesado es parte o por relación precontractual (art. 6.1.b RGPD) procediendo éstos del propio interesado titular de los mismos. | Conservación de los datos: sus datos se conservarán el tiempo estrictamente necesario y por los plazos legales de conservación (4, 6 o 10 años, según el caso). | Destinatarios: sus datos no serán cedidos a ninguna empresa, salvo obligación legal. | Derechos: puede acceder, rectificar y suprimir los datos, así como el resto de derechos que le asisten, como se explica in la información adicional. | Información adicional: puede consultar la información adicional y detallada sobre protección de Datos en ${company.email || ""} o solicitando más información en nuestra oficina sita en la dirección indicada en el apartado “Responsable del Tratamiento”.`;
+
+  doc.text(legalText, 50, currentY + 50, { width: 500, align: "justify" });
 
   // Bank Info Footer
   const bankInfoY = pageHeight - bottomMargin - 45;
   doc.fontSize(8).fillColor("black");
 
-  doc.font("Helvetica-Bold").text("VerSal-IT", 50, bankInfoY);
+  doc.font("Helvetica-Bold").text(company.name || "VerSal-IT", 50, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("Avenida Barcelona", 50, bankInfoY + 10);
-  doc.text("14010 Córdoba", 50, bankInfoY + 18);
-  doc.text("info@versal-it.es | https://versal-it.com/", 50, bankInfoY + 26);
+  doc.text(company.address || "Avenida Barcelona", 50, bankInfoY + 10);
+  doc.text(
+    `${company.postalCode || "14010"} ${company.city || "Córdoba"}`,
+    50,
+    bankInfoY + 18,
+  );
+  doc.text(
+    `${company.email || "info@versal-it.es"} | ${company.url || "https://versal-it.com/"}`,
+    50,
+    bankInfoY + 26,
+  );
 
-  doc.font("Helvetica-Bold").text("NIF: B00000000", 250, bankInfoY);
+  doc
+    .font("Helvetica-Bold")
+    .text(`NIF: ${company.nif || "B00000000"}`, 250, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("Tomo: 00000, Libro: 0, Folio: 0", 250, bankInfoY + 10);
-  doc.text("Sección: 0 Hoja: X 000000", 250, bankInfoY + 18);
-  doc.text("Inscripción 0", 250, bankInfoY + 26);
+  doc.text(
+    `Tomo: ${registry.tomo || "00000"}, Libro: ${registry.libro || "0"}, Folio: ${registry.folio || "0"}`,
+    250,
+    bankInfoY + 10,
+  );
+  doc.text(
+    `Sección: ${registry.seccion || "0"} Hoja: ${registry.hoja || "X 000000"}`,
+    250,
+    bankInfoY + 18,
+  );
+  doc.text(`Inscripción ${registry.inscripcion || "0"}`, 250, bankInfoY + 26);
 
-  doc.font("Helvetica-Bold").text("Banco: BBVA", 430, bankInfoY);
+  doc
+    .font("Helvetica-Bold")
+    .text(`Banco: ${bank.name || "BBVA"}`, 430, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("IBAN: ES0000000000000000000000", 430, bankInfoY + 10);
-  doc.text("SWIFT: BBVAESMM", 430, bankInfoY + 18);
+  doc.text(
+    `IBAN: ${bank.iban || "ES0000000000000000000000"}`,
+    430,
+    bankInfoY + 10,
+  );
+  doc.text(`SWIFT: ${bank.swift || "BBVAESMM"}`, 430, bankInfoY + 18);
 
   doc.end();
 };
@@ -783,14 +851,8 @@ const buildAlbaranPDF = async (
   doc.on("end", endCallback);
 
   // --- Header Section ---
-  const logoPath = path.resolve(__dirname, "../../public/VerSalIT-bg.png");
-
-  try {
-    doc.image(logoPath, 50, 45, { width: 150 });
-  } catch (err) {
-    console.warn("Logo not found at:", logoPath);
-    doc.fontSize(20).text("VerSalIT", 50, 45);
-  }
+  const settings = await Settings.findOne();
+  await drawLogo(doc, settings);
 
   // Client Info Box (Right side)
   const clientX = 350;
@@ -927,22 +989,46 @@ const buildAlbaranPDF = async (
 
   const bankInfoY = pageHeight - bottomMargin - 45;
   doc.fontSize(8).fillColor("black");
-  doc.font("Helvetica-Bold").text("VerSal-IT", 50, bankInfoY);
+  doc.font("Helvetica-Bold").text(company.name || "VerSal-IT", 50, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("Avenida Barcelona", 50, bankInfoY + 10);
-  doc.text("14010 Córdoba", 50, bankInfoY + 18);
-  doc.text("info@versal-it.es | https://versal-it.com/", 50, bankInfoY + 26);
+  doc.text(company.address || "Avenida Barcelona", 50, bankInfoY + 10);
+  doc.text(
+    `${company.postalCode || "14010"} ${company.city || "Córdoba"}`,
+    50,
+    bankInfoY + 18,
+  );
+  doc.text(
+    `${company.email || "info@versal-it.es"} | ${company.url || "https://versal-it.com/"}`,
+    50,
+    bankInfoY + 26,
+  );
 
-  doc.font("Helvetica-Bold").text("NIF: B00000000", 250, bankInfoY);
+  doc
+    .font("Helvetica-Bold")
+    .text(`NIF: ${company.nif || "B00000000"}`, 250, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("Tomo: 00000, Libro: 0, Folio: 0", 250, bankInfoY + 10);
-  doc.text("Sección: 0 Hoja: X 000000", 250, bankInfoY + 18);
-  doc.text("Inscripción 0", 250, bankInfoY + 26);
+  doc.text(
+    `Tomo: ${registry.tomo || "00000"}, Libro: ${registry.libro || "0"}, Folio: ${registry.folio || "0"}`,
+    250,
+    bankInfoY + 10,
+  );
+  doc.text(
+    `Sección: ${registry.seccion || "0"} Hoja: ${registry.hoja || "X 000000"}`,
+    250,
+    bankInfoY + 18,
+  );
+  doc.text(`Inscripción ${registry.inscripcion || "0"}`, 250, bankInfoY + 26);
 
-  doc.font("Helvetica-Bold").text("Banco: BBVA", 430, bankInfoY);
+  doc
+    .font("Helvetica-Bold")
+    .text(`Banco: ${bank.name || "BBVA"}`, 430, bankInfoY);
   doc.font("Helvetica").fontSize(7);
-  doc.text("IBAN: ES0000000000000000000000", 430, bankInfoY + 10);
-  doc.text("SWIFT: BBVAESMM", 430, bankInfoY + 18);
+  doc.text(
+    `IBAN: ${bank.iban || "ES0000000000000000000000"}`,
+    430,
+    bankInfoY + 10,
+  );
+  doc.text(`SWIFT: ${bank.swift || "BBVAESMM"}`, 430, bankInfoY + 18);
 
   doc.end();
 };

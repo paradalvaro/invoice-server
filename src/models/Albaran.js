@@ -26,7 +26,6 @@ const AlbaranSchema = new mongoose.Schema({
   },
   serie: {
     type: String,
-    enum: ["AL2025", "AL2026"],
     required: function () {
       return getStatus(this) !== "Draft";
     },

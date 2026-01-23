@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const InvoiceSchema = new mongoose.Schema({
+const BillSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
@@ -12,37 +12,31 @@ const InvoiceSchema = new mongoose.Schema({
       return this.status !== "Draft";
     },
   },
-  type: {
-    type: String,
-    enum: ["F1", "F2", "R1", "R4"],
-    required: true,
-    default: "F1",
-  },
-  invoiceNumber: {
+  billNumber: {
     type: Number,
     required: function () {
       return this.status !== "Draft";
     },
   },
-  client: {
+  supplier: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Client",
+    ref: "Supplier",
     required: false,
   },
-  clientName: {
+  supplierName: {
     type: String,
     required: function () {
-      return this.type !== "F2" && this.status !== "Draft";
+      return this.status !== "Draft";
     },
   },
-  clientNIF: {
+  supplierNIF: {
     type: String,
     required: function () {
-      return this.type !== "F2" && this.status !== "Draft";
+      return this.status !== "Draft";
     },
     validate: {
       validator: function (v) {
-        if (this.type === "F2" && !v) return true;
+        if (!v) return true;
         // Individual NIF (DNI): 8 digits + 1 control character
         const individualDniRegex = /^[0-9]{8}[A-Z]$/;
         // Individual NIF (Non-resident): L/M + 7 digits + 1 control character
@@ -78,7 +72,6 @@ const InvoiceSchema = new mongoose.Schema({
         taxBase: { type: Number, required: true },
         discount: { type: Number, default: 0 },
         iva: { type: Number, required: true, default: 21 },
-        albaranId: { type: mongoose.Schema.Types.ObjectId, ref: "Albaran" },
       },
     ],
     required: true,
@@ -97,17 +90,6 @@ const InvoiceSchema = new mongoose.Schema({
     type: Number,
     required: function () {
       return this.status !== "Draft";
-    },
-  },
-  externalDocumentNumber: {
-    type: String,
-    required: false,
-    validate: {
-      validator: function (v) {
-        if (!v) return true; // Optional in Invoice
-        return /^[a-zA-Z0-9\s-]+$/.test(v);
-      },
-      message: (props) => `${props.value} is not a valid alphanumeric number!`,
     },
   },
   orderNumber: {
@@ -134,38 +116,9 @@ const InvoiceSchema = new mongoose.Schema({
       return this.status !== "Draft";
     },
   },
-  hash: {
-    type: String,
-    required: function () {
-      return this.status !== "Draft";
-    },
-  },
-  rectifyInvoice: {
-    type: String,
-    required: function () {
-      return /^(R1|R4)$/.test(this.type);
-    },
-  },
-  rectifyReason: {
-    type: String,
-    required: function () {
-      return /^(R1|R4)$/.test(this.type);
-    },
-  },
-  history: [
-    {
-      type: {
-        type: String,
-        enum: ["CREATED", "STATUS_CHANGE", "EMAIL_SENT", "ALBARAN_LINKED"],
-      },
-      date: { type: Date, default: Date.now },
-      description: String,
-      details: mongoose.Schema.Types.Mixed,
-    },
-  ],
 });
 
-InvoiceSchema.pre("validate", async function () {
+BillSchema.pre("validate", async function () {
   if (this.services && this.services.length > 0) {
     this.totalAmount = this.services.reduce((acc, service) => {
       const base = parseFloat(service.taxBase);
@@ -192,4 +145,4 @@ InvoiceSchema.pre("validate", async function () {
   }
 });
 
-module.exports = mongoose.model("Invoice", InvoiceSchema);
+module.exports = mongoose.model("Bill", BillSchema);

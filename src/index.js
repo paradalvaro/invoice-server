@@ -30,9 +30,10 @@ app.use("/admin/queues", serverAdapter.getRouter());
 app.use(
   cors({
     origin: process.env.CORS_URL,
-  })
+  }),
 );
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use("/api/uploads", express.static("uploads"));
 
 // Database Connection
@@ -44,6 +45,8 @@ app.use("/api/invoices", invoiceRoutes);
 app.use("/api/clients", require("./routes/clientRoutes"));
 app.use("/api/budgets", require("./routes/budgetRoutes"));
 app.use("/api/albaranes", require("./routes/albaranRoutes"));
+app.use("/api/suppliers", require("./routes/supplierRoutes"));
+app.use("/api/bills", require("./routes/billRoutes"));
 app.use("/api/settings", require("./routes/settingsRoutes"));
 
 const PORT = process.env.PORT || 5000;

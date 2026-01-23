@@ -16,7 +16,6 @@ const BudgetSchema = new mongoose.Schema({
   },
   serie: {
     type: String,
-    enum: ["P2025", "P2026"],
     required: function () {
       return getStatus(this) !== "Draft";
     },
